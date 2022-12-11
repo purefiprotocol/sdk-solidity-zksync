@@ -8,8 +8,11 @@ interface IPureFiTxContext {
         uint256, //sessionID
         uint256, //ruleID
         uint256, //validUntil
-        address, //sender
-        address //issuer
+        address, //from
+        address, //to
+        address, //token
+        uint256, //amount
+        bytes memory //payload
     );
     
 }

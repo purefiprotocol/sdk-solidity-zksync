@@ -13,24 +13,27 @@ import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "./interfaces/IPureFiTxContext.sol";
 import "./libraries/SignLib.sol";
 import "./libraries/BytesLib.sol";
-
+import "./PureFiData.sol";
 
 contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext{
+
+    struct PureFiContext{
+        uint64 validUntil;
+        uint256 session;
+        uint256 rule;
+        address from;
+        address to;
+        address token;
+        uint256 amount;
+        bytes payload;
+    }
+    using PureFiDataUtils for bytes;
 
     address public pureFiSubscriptionContract;
 
     bytes32 public constant ISSUER_ROLE = 0x0000000000000000000000000000000000000000000000000000000000009999;
     // context data
-    struct PureFiContext{
-        uint256 sessionID;
-        uint256 ruleID;
-        uint256 validUntil;
-        address sender;
-        address issuer;
-    }
 
-
-    uint8 public testMode;
     uint256 internal graceTime; //a period verification credentials are considered valid;
 
     mapping (address => PureFiContext) contextData; //context data structure
@@ -47,7 +50,6 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     constructor(address _admin, address _subscriptionContract) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        testMode = 2;
         pureFiSubscriptionContract = _subscriptionContract; //this is to validate the PureFi subscription in future. 
         graceTime = 180;//3 min - default value;
     }
@@ -59,10 +61,6 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
         graceTime = _gracePeriod;
-    }
-
-    function setTestMode(uint8 _testMode) external onlyRole(DEFAULT_ADMIN_ROLE){
-        testMode = _testMode;
     }
 
     function validateAndPayForPaymasterTransaction(
@@ -84,35 +82,29 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             (bytes memory input) = abi.decode(_transaction.paymasterInput[4:], (bytes));
             //unpack embedded data geberated by the PureFi Issuer service
             
-            /**
-            @param data - signed data package from the off-chain verifier
-                data[0] - verification session ID
-                data[1] - circuit ID (if required)
-                data[2] - verification timestamp
-                data[3] - verified wallet - to be the same as msg.sender
-            @param signature - Off-chain issuer signature
-            */
+    
+            (uint64 timestamp, bytes memory signature, bytes memory package) = input.decodePureFiData();
 
-            (uint[4] memory data, bytes memory signature) = abi.decode(input, (uint[4], bytes));
-
+            VerificationPackage memory packageStruct = package.decodePackage();
             //get issuer address from the signature
-            address issuer = recoverSigner(keccak256(abi.encodePacked(data[0], data[1], data[2], data[3])), signature);
+            address issuer = recoverSigner(keccak256(abi.encodePacked(timestamp, package)), signature);
 
             require(hasRole(ISSUER_ROLE, issuer), "PureFiPaymaster: Issuer signature invalid");
-            require(data[2] + graceTime >= block.timestamp, "PureFiPaymaster: Credentials data expired");
+
+            require(timestamp + graceTime >= block.timestamp, "PureFiPaymaster: Credentials data expired");
 
             address contextAddress = address(uint160(_transaction.to));
 
             //saving data locally so that they can be queried by the customer contract
 
-            contextData[contextAddress] = PureFiContext(data[0], data[1], data[2], address(uint160(data[3])), issuer);
+            contextData[contextAddress] = _getPureFiContext(packageStruct, timestamp + uint64(graceTime));
             
             // Note, that while the minimal amount of ETH needed is tx.ergsPrice * tx.ergsLimit,
             // neither paymaster nor account are allowed to access this context variable.
             uint256 requiredETH = _transaction.ergsLimit *
                 _transaction.maxFeePerErg;
 
-            // require(msg.value >= requiredETH, "PureFiPaymaster: not enough ETH to pay for tx");
+            require(msg.value >= requiredETH, "PureFiPaymaster: not enough ETH to pay for tx");
 
             // The bootloader never returns any data, so it can safely be ignored here.
             (bool success, ) = payable(BOOTLOADER_FORMAL_ADDRESS).call{
@@ -120,10 +112,6 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             }("");
             require(success, "PureFiPaymaster: Failed to transfer funds to the bootloader");
 
-            if(testMode > 7){
-                // delete contextData[contextAddress]; // THIS DOESN'T WORK
-                contextData[contextAddress] = PureFiContext(0, 0, 0, address(uint160(0)), address(0)); // THIS DOESN'T WORK EITHER. Don't set testMode > 7
-            }
         } 
         else {
             revert("Unsupported paymaster flow");
@@ -134,13 +122,24 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         uint256, //sessionID
         uint256, //ruleID
         uint256, //validUntil
-        address, //sender
-        address //issuer
+        address, //from
+        address, //to
+        address, //token
+        uint256, //amount
+        bytes memory //payload
     ) {
         address _contextAddr = msg.sender;
-        if(testMode > 7) //don't chage testMode to > 7, the code below will result in "revert" on gasEstimation.
-            require(contextData[_contextAddr].sessionID > 0, "PureFi: session context is not initialized");
-        return (contextData[_contextAddr].sessionID, contextData[_contextAddr].ruleID, contextData[_contextAddr].validUntil, contextData[_contextAddr].sender, contextData[_contextAddr].issuer);            
+        PureFiContext memory context = contextData[_contextAddr];
+        return (
+            context.session,
+            context.rule,
+            context.validUntil,
+            context.from,
+            context.to,
+            context.token,
+            context.amount,
+            context.payload
+        );
     }
 
     /**
@@ -150,11 +149,24 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         uint256, //sessionID
         uint256, //ruleID
         uint256, //validUntil
-        address, //sender
-        address //issuer
+        address, //from
+        address, //to
+        address, //token
+        uint256, //amount
+        bytes memory //payload
     ) 
     {
-        return (contextData[_contextAddr].sessionID, contextData[_contextAddr].ruleID, contextData[_contextAddr].validUntil, contextData[_contextAddr].sender, contextData[_contextAddr].issuer);    
+        PureFiContext memory context = contextData[_contextAddr];
+        return (
+            context.session,
+            context.rule,
+            context.validUntil,
+            context.from,
+            context.to,
+            context.token,
+            context.amount,
+            context.payload
+        );
     }
 
     function postOp(
@@ -169,4 +181,17 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
     }
 
     receive() external payable {}
+
+    function _getPureFiContext(VerificationPackage memory _package, uint64 _validUntil) internal pure returns(PureFiContext memory){
+        return PureFiContext(
+            _validUntil,
+            _package.session,
+            _package.rule,
+            _package.from,
+            _package.to,
+            _package.token,
+            _package.amount,
+            _package.payload
+            );
+    }
 }
