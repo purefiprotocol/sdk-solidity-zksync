@@ -15,7 +15,8 @@ import "./libraries/SignLib.sol";
 import "./libraries/BytesLib.sol";
 import "./PureFiData.sol";
 
-contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext{
+
+contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext, PureFiDataUtils{
 
     struct PureFiContext{
         uint64 validUntil;
@@ -27,7 +28,6 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         uint256 amount;
         bytes payload;
     }
-    using PureFiDataUtils for bytes;
 
     address public pureFiSubscriptionContract;
 
@@ -56,7 +56,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 1000025;
+        return 2000001;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -83,9 +83,9 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             //unpack embedded data geberated by the PureFi Issuer service
             
     
-            (uint64 timestamp, bytes memory signature, bytes memory package) = input.decodePureFiData();
+            (uint64 timestamp, bytes memory signature, bytes memory package) = decodePureFiData(input);
 
-            VerificationPackage memory packageStruct = package.decodePackage();
+            VerificationPackage memory packageStruct = decodePackage(package);
             //get issuer address from the signature
             address issuer = recoverSigner(keccak256(abi.encodePacked(timestamp, package)), signature);
 
@@ -93,7 +93,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
             require(timestamp + graceTime >= block.timestamp, "PureFiPaymaster: Credentials data expired");
 
-            address contextAddress = address(uint160(_transaction.to));
+            address contextAddress = packageStruct.from;
 
             //saving data locally so that they can be queried by the customer contract
 
@@ -104,7 +104,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             uint256 requiredETH = _transaction.ergsLimit *
                 _transaction.maxFeePerErg;
 
-            require(msg.value >= requiredETH, "PureFiPaymaster: not enough ETH to pay for tx");
+            // require(msg.value >= requiredETH, "PureFiPaymaster: not enough ETH to pay for tx");
 
             // The bootloader never returns any data, so it can safely be ignored here.
             (bool success, ) = payable(BOOTLOADER_FORMAL_ADDRESS).call{
@@ -118,37 +118,10 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         }
     }
 
-    function pureFiContextData() external override view returns (
-        uint256, //sessionID
-        uint256, //ruleID
-        uint256, //validUntil
-        address, //from
-        address, //to
-        address, //token
-        uint256, //amount
-        bytes memory //payload
-    ) {
-        address _contextAddr = msg.sender;
-        PureFiContext memory context = contextData[_contextAddr];
-        return (
-            context.session,
-            context.rule,
-            context.validUntil,
-            context.from,
-            context.to,
-            context.token,
-            context.amount,
-            context.payload
-        );
-    }
-
-    /**
-    for testing purposes only
-     */
     function pureFiContextDataX(address _contextAddr) external view returns (
         uint256, //sessionID
         uint256, //ruleID
-        uint256, //validUntil
+        uint64, //validUntil
         address, //from
         address, //to
         address, //token
@@ -182,6 +155,8 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     receive() external payable {}
 
+
+    // get PureFiContext struct from VerificationPackage and timestamp
     function _getPureFiContext(VerificationPackage memory _package, uint64 _validUntil) internal pure returns(PureFiContext memory){
         return PureFiContext(
             _validUntil,

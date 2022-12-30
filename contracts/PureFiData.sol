@@ -16,8 +16,7 @@ pragma solidity ^0.8.0;
   // later on we'll add purefipackagetype = 4. with non-interactive mode data, and this will go into payload
 
 // min size of purefidata = 8 + 65 + 1 + 32 + 32 + 20  = bytes
-
-
+import "./libraries/BytesLib.sol";
  struct VerificationPackage{
         uint8 packagetype;
         uint256 session;
@@ -28,17 +27,21 @@ pragma solidity ^0.8.0;
         uint256 amount;
         bytes payload;
     }
-library PureFiDataUtils{
+abstract contract PureFiDataUtils is BytesLib{
 
-    function decodePureFiData(bytes calldata self) public pure returns(uint64 timestamp, bytes memory signature, bytes memory package){
+    function decodePureFiData(bytes memory self) public pure returns(uint64 timestamp, bytes memory signature, bytes memory package){
         require(self.length >= 158, "Incorrect purefidata pack");
         (timestamp, signature, package) = abi.decode(self, (uint64, bytes, bytes));
     }
 
-    function decodePackage(bytes calldata _purefipackage) public pure returns (VerificationPackage memory data){
-        uint256 packagetype = uint256(bytes32(_purefipackage[:32]));
+    function decodePackage(bytes memory _purefipackage) public pure returns (VerificationPackage memory data){
+        uint256 packagetype = uint256(bytes32(slice(_purefipackage, 0, 32)));
     if(packagetype == 1){
-      (, uint256 ruleID, uint256 sessionID, address sender) = abi.decode(_purefipackage, (uint8, uint256, uint256, address));
+      (, 
+      uint256 ruleID, 
+      uint256 sessionID, 
+      address sender
+      ) = abi.decode(_purefipackage, (uint8, uint256, uint256, address));
       return VerificationPackage({
           packagetype : 1,
           session: sessionID,
@@ -51,7 +54,14 @@ library PureFiDataUtils{
         }); 
     }
     else if(packagetype == 2){
-      (, uint256 ruleID, uint256 sessionID, address sender, address receiver, address token_addr, uint256 tx_amount) = abi.decode(_purefipackage, (uint8, uint256, uint256, address, address, address, uint256));
+      (, 
+      uint256 ruleID, 
+      uint256 sessionID, 
+      address sender, 
+      address receiver, 
+      address token_addr, 
+      uint256 tx_amount
+      ) = abi.decode(_purefipackage, (uint8, uint256, uint256, address, address, address, uint256));
       return VerificationPackage({
           packagetype : 2,
           rule : ruleID,
@@ -76,7 +86,5 @@ library PureFiDataUtils{
           payload : payload_data
         }); 
     }
-    require (false, "PureFiVerifier : invalid package data");
   }
 }
-

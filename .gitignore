@@ -10,4 +10,7 @@ cache
 artifacts
 
 yarn.lock
-
+artifacts*
+cache*
+network_keys
+testnet_addresses
