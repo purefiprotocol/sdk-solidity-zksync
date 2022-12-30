@@ -58,8 +58,8 @@ export default async function (hre : HardhatRuntimeEnvironment){
         paymaster.address
     ]);
 
-    console.log("testContract address : ", testContract.address);
-    console.log("testContract context holder : ", await testContract.contextHolder.call());
+    console.log("FilteredPool address : ", testContract.address);
+    console.log("FilteredPool context holder : ", await testContract.contextHolder.call());
 
 
     // mint test tokens
