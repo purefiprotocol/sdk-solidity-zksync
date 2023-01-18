@@ -53,7 +53,7 @@ contract FilteredPool is Initializable {
             address token,
             uint256 amount,
             bytes memory payload
-        ) = contextHolder.pureFiContextDataX(msg.sender);
+        ) = contextHolder.getPureFiContextData(msg.sender);
         if (!testMode) {
             require(ruleID == expectedDepositRuleID, "Invalid ruleID provided");
             require(
@@ -99,7 +99,7 @@ contract FilteredPool is Initializable {
             ,
             ,
 
-        ) = contextHolder.pureFiContextDataX(msg.sender);
+        ) = contextHolder.getPureFiContextData(msg.sender);
 
         if (!testMode) {
             require(

@@ -31,7 +31,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     address public pureFiSubscriptionContract;
 
-    bytes32 public constant ISSUER_ROLE = 0x0000000000000000000000000000000000000000000000000000000000009999;
+    bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
     // context data
 
     uint256 internal graceTime; //a period verification credentials are considered valid;
@@ -56,7 +56,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000001;
+        return 2000002;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -118,7 +118,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         }
     }
 
-    function pureFiContextDataX(address _contextAddr) external view returns (
+    function getPureFiContextData(address _contextAddr) external view returns (
         uint256, //sessionID
         uint256, //ruleID
         uint64, //validUntil
@@ -157,7 +157,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
 
     // get PureFiContext struct from VerificationPackage and timestamp
-    function _getPureFiContext(VerificationPackage memory _package, uint64 _validUntil) internal pure returns(PureFiContext memory){
+    function _getPureFiContext(VerificationPackage memory _package, uint64 _validUntil) private pure returns(PureFiContext memory){
         return PureFiContext(
             _validUntil,
             _package.session,

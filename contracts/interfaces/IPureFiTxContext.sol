@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 
 interface IPureFiTxContext {
 
-    function pureFiContextDataX(address _contextAddr) external view returns (
+    function getPureFiContextData(address _contextAddr) external view returns (
         uint256, //sessionID
         uint256, //ruleID
         uint64, //validUntil
