@@ -7,11 +7,11 @@ import { Deployer } from '@matterlabs/hardhat-zksync-deploy';
 import { privateKey } from "../network_keys/secrets.json";
 import { defaultAbiCoder, keccak256, recoverAddress, solidityPack } from 'ethers/lib/utils';
 
-const PAYMASTER_ADDRESS = "0xB805302FaDBBf45D1E97058F0Dc7C8d377BF1A85";
+const PAYMASTER_ADDRESS = "0xaaE07A34b767bD96677Cb3f2a58994DA87f28c47";
 
-const FILTERED_POOL_ADDRESS = "0xC40fFC6523522be55eC640dedb6D1d0A61056E86";
+const FILTERED_POOL_ADDRESS = "0xA8830e0033D5b4135A45cF797DcBB581cDfE32c6";
 
-const TEST_TOKEN_ADDRESS = "0xb0f5c8445Dc9D7D20DAB9590587486053923D84c";
+const TEST_TOKEN_ADDRESS = "0xd10A0c013ca49CF5D5841498d6D901a5Ac156074";
 
 const privateKeyIssuer = 'e3ad95aa7e9678e96fb3d867c789e765db97f9d2018fca4068979df0832a5178';
 
@@ -229,7 +229,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     }
     // deposit erc20
 
-    const context = await paymaster.connect(emptyWallet).pureFiContextDataX(emptyWallet.address);
+    const context = await paymaster.connect(emptyWallet).getPureFiContextData(emptyWallet.address);
 
     console.log("Context : ", context);
 

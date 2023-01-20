@@ -14,6 +14,7 @@ import "./interfaces/IPureFiTxContext.sol";
 import "./libraries/SignLib.sol";
 import "./libraries/BytesLib.sol";
 import "./PureFiData.sol";
+import "./interfaces/IPureFiIssuerRegistry.sol";
 
 
 contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext, PureFiDataUtils{
@@ -31,13 +32,13 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     address public pureFiSubscriptionContract;
 
-    bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
     // context data
 
     uint256 internal graceTime; //a period verification credentials are considered valid;
 
     mapping (address => PureFiContext) contextData; //context data structure
 
+    IPureFiIssuerRegistry issuerRegistry;
 
     modifier onlyBootloader() {
         require(
@@ -48,15 +49,16 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         _;
     }
 
-    constructor(address _admin, address _subscriptionContract) {
+    constructor(address _admin, address _subscriptionContract, address _issuerRegistry) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         pureFiSubscriptionContract = _subscriptionContract; //this is to validate the PureFi subscription in future. 
         graceTime = 180;//3 min - default value;
+        issuerRegistry = IPureFiIssuerRegistry(_issuerRegistry);
     }
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000002;
+        return 2000003;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -88,8 +90,8 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             VerificationPackage memory packageStruct = decodePackage(package);
             //get issuer address from the signature
             address issuer = recoverSigner(keccak256(abi.encodePacked(timestamp, package)), signature);
-
-            require(hasRole(ISSUER_ROLE, issuer), "PureFiPaymaster: Issuer signature invalid");
+            
+            require(issuerRegistry.isValidIssuer(issuer), "PureFiPaymaster: Issuer signature invalid");
 
             require(timestamp + graceTime >= block.timestamp, "PureFiPaymaster: Credentials data expired");
 

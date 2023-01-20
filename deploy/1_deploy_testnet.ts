@@ -32,24 +32,31 @@ export default async function (hre : HardhatRuntimeEnvironment){
 
     console.log("ERC20 address : ", erc20.address);
 
-    // deploy paymaster
-    const paymasterArtifact = await deployer.loadArtifact("PureFiPaymaster");
-    const paymaster = await deployer.deploy(paymasterArtifact, [
-        wallet.address,
-        PLUG_ADDRESS
-    ]);
-
-    console.log("Paymaster address : ", paymaster.address);
-
     const issuerAddress = EthCrypto.publicKey.toAddress(EthCrypto.publicKeyByPrivateKey(privateKeyIssuer));
 
     console.log("Issuer address : ", issuerAddress);
 
-    const ISSUER_ROLE = await paymaster.ISSUER_ROLE.call();
-    await(await paymaster.grantRole(ISSUER_ROLE, issuerAddress)).wait();
+    // deploy issuer_registry
+    const issuerRegistryArtifact = await deployer.loadArtifact("MockIssuerRegistry");
+    const issuerRegistry = await deployer.deploy(issuerRegistryArtifact, [
+        wallet.address
+    ]);
 
-    let isIssuer = await paymaster.hasRole(ISSUER_ROLE, issuerAddress);
-    console.log("isIssuer :", isIssuer);
+    // register issuer 
+    await issuerRegistry.register(issuerAddress, "0x0000000000000000000000000000000000000000000000000000000000000001");
+
+    const isValidIssuer = await issuerRegistry.isValidIssuer(issuerAddress);
+    console.log("isValidIssuer ( bool ) : ", isValidIssuer);
+
+    // deploy paymaster
+    const paymasterArtifact = await deployer.loadArtifact("PureFiPaymaster");
+    const paymaster = await deployer.deploy(paymasterArtifact, [
+        wallet.address,
+        PLUG_ADDRESS,
+        issuerRegistry.address
+    ]);
+
+    console.log("Paymaster address : ", paymaster.address);
 
     // deploy test contract
     const testContractArtifact = await deployer.loadArtifact("FilteredPool");
