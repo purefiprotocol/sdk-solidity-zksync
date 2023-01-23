@@ -5,6 +5,7 @@ import EthCrypto from 'eth-crypto';
 import { Deployer } from '@matterlabs/hardhat-zksync-deploy';
 
 import { privateKey } from "../network_keys/secrets.json";
+import fs from 'fs';
 
 
 const PLUG_ADDRESS = "0x0000000000000000000000000000000000000001";
@@ -73,4 +74,16 @@ export default async function (hre : HardhatRuntimeEnvironment){
     await( await erc20.mint(EMPTY_WALLET_ADDRESS, ethers.utils.parseEther("100"))).wait();
 
     console.log("Wallet balance : ", await erc20.balanceOf(EMPTY_WALLET_ADDRESS));
+
+    // write new deployed contracts addresses to file;
+    let contracts = {
+        paymaster : paymaster.address,
+        filteredPool : testContract.address,
+        erc20 : erc20.address
+    };
+    let data = JSON.stringify(contracts);
+
+    fs.writeFileSync('./addresses.json', data);
+    console.log("File is written");
+
 }

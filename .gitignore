@@ -14,3 +14,4 @@ artifacts*
 cache*
 network_keys
 testnet_addresses
+addresses.json

@@ -6,12 +6,13 @@ import { Deployer } from '@matterlabs/hardhat-zksync-deploy';
 
 import { privateKey } from "../network_keys/secrets.json";
 import { defaultAbiCoder, keccak256, recoverAddress, solidityPack } from 'ethers/lib/utils';
+import {paymaster, filteredPool, erc20} from "../addresses.json";
 
-const PAYMASTER_ADDRESS = "0xaaE07A34b767bD96677Cb3f2a58994DA87f28c47";
+const PAYMASTER_ADDRESS = paymaster;
 
-const FILTERED_POOL_ADDRESS = "0xA8830e0033D5b4135A45cF797DcBB581cDfE32c6";
+const FILTERED_POOL_ADDRESS = filteredPool;
 
-const TEST_TOKEN_ADDRESS = "0xd10A0c013ca49CF5D5841498d6D901a5Ac156074";
+const TEST_TOKEN_ADDRESS = erc20;
 
 const privateKeyIssuer = 'e3ad95aa7e9678e96fb3d867c789e765db97f9d2018fca4068979df0832a5178';
 
@@ -201,10 +202,10 @@ export default async function (hre: HardhatRuntimeEnvironment) {
             });
 
         console.log("Approve gas limit : ", gasLimit.toString());
-
         let fee = gasPrice.mul(gasLimit);
-        let valueToSend = fee.add(ethers.utils.parseEther('0.0001'));
 
+        console.log("Fee for ERC20 approve : ", fee.toString());
+        let valueToSend = fee;
         await fundPaymaster(hre, provider, valueToSend);
 
         await (
@@ -222,7 +223,6 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                     },
                 })
         ).wait();
-
 
         console.log("Success approve");
         console.log("Allowance : ", await (await erc20.connect(emptyWallet).allowance(emptyWallet.address, filteredPool.address)).toString());
@@ -252,34 +252,38 @@ export default async function (hre: HardhatRuntimeEnvironment) {
             erc20.address,
             depositAmount);
 
-        // const gasLimit = await filteredPool.connect(emptyWallet).estimateGas.depositTo(
-        //     depositAmount,
-        //     emptyWallet.address,
-        //     {
-        //         customData: {
-        //             ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT,
-        //             paymasterParams: {
-        //                 paymaster: paymasterParams.paymaster,
-        //                 paymasterInput: paymasterParams.paymasterInput
-        //             }
-        //         }
-        //     });
+        const gasLimit = await filteredPool.connect(emptyWallet).estimateGas.depositTo(
+            depositAmount,
+            emptyWallet.address,
+            {
+                customData: {
+                    ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT,
+                    paymasterParams: {
+                        paymaster: paymasterParams.paymaster,
+                        paymasterInput: paymasterParams.paymasterInput
+                    }
+                }
+            });
 
-        // console.log("DepositTo Gas Limit : ", gasLimit);
-        const gasLimit = 5993436;
+        console.log("Gas limit : ", gasLimit.toString());
+
+        console.log("DepositTo Gas Limit : ", gasLimit.toString());
 
         let fee = gasPrice.mul(gasLimit);
-        let valueToSend = fee.add(ethers.utils.parseEther('0.02'));
+        let valueToSend = fee;
 
         await fundPaymaster(hre, provider, valueToSend);
 
         const paymasterBalanceAfter = await provider.getBalance(paymaster.address);
         console.log("Paymaster balance after funding : ", paymasterBalanceAfter.toString());
 
-        await (await filteredPool.connect(emptyWallet).depositTo(
+        const tx = await (await filteredPool.connect(emptyWallet).depositTo(
             depositAmount,
             emptyWallet.address,
             {
+                maxFeePerGas: gasPrice,
+                maxPriorityFeePerGas: gasPrice,
+                gasLimit : gasLimit,
                 customData: {
                     ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT,
                     paymasterParams: {
