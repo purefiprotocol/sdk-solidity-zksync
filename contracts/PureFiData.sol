@@ -12,7 +12,7 @@ pragma solidity ^0.8.0;
   //      packagedata = bytes, dynamic, remaining data
   // if(purefipackagetype = 1) => packagedata = {uint256 ruleID, uint256 sessionId, address sender}
   // if(purefipackagetype = 2) => packagedata = {uint256 ruleID, uint256 sessionId, address sender, address receiver, address token, uint258 amount}
-  // if(purefipackagetype = 3) => packagedata = {uint256 ruleID, uint256 sessionId, bytes payload}
+  // if(purefipackagetype = 3) => packagedata = {uint256 ruleID, uint256 sessionId, address sender, bytes payload}
   // later on we'll add purefipackagetype = 4. with non-interactive mode data, and this will go into payload
 
 // min size of purefidata = 8 + 65 + 1 + 32 + 32 + 20  = bytes
@@ -74,12 +74,17 @@ abstract contract PureFiDataUtils is BytesLib{
         }); 
     }
     else if(packagetype == 3){
-      (, uint256 ruleID, uint256 sessionID, bytes memory payload_data) = abi.decode(_purefipackage, (uint8, uint256, uint256, bytes));
+      (, 
+      uint256 ruleID, 
+      uint256 sessionID, 
+      address sender, 
+      bytes memory payload_data
+      ) = abi.decode(_purefipackage, (uint8, uint256, uint256, address, bytes));
       return VerificationPackage({
           packagetype : 3,
           rule : ruleID,
           session: sessionID,
-          from : address(0),
+          from : sender,
           to : address(0),
           token : address(0),
           amount : 0,
