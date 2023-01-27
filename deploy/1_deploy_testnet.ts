@@ -15,9 +15,12 @@ const EMPTY_WALLET_PRIVATE_KEY = "0x9f1f9daa4d7093111684d7043824bc98a863444cd1a9
 
 const EMPTY_WALLET_ADDRESS = "0x4DF6Ba41aAF6209A9C47856feF7Fb8058e93d7Ae";
 
+const NETWORK_URL = 'https://zksync2-testnet.zksync.dev';
+
+
 export default async function (hre : HardhatRuntimeEnvironment){
 
-    const provider = new Provider(hre.config.zkSyncDeploy.zkSyncNetwork);
+    const provider = new Provider(NETWORK_URL);
 
     const wallet = new Wallet(privateKey, provider);
 
@@ -46,15 +49,14 @@ export default async function (hre : HardhatRuntimeEnvironment){
     // register issuer 
     await issuerRegistry.register(issuerAddress, "0x0000000000000000000000000000000000000000000000000000000000000001");
 
-    const isValidIssuer = await issuerRegistry.isValidIssuer(issuerAddress);
-    console.log("isValidIssuer ( bool ) : ", isValidIssuer);
-
     // deploy paymaster
     const paymasterArtifact = await deployer.loadArtifact("PureFiPaymaster");
     const paymaster = await deployer.deploy(paymasterArtifact, [
         wallet.address,
         PLUG_ADDRESS,
-        issuerRegistry.address
+        issuerRegistry.address,
+        erc20.address,
+        PLUG_ADDRESS
     ]);
 
     console.log("Paymaster address : ", paymaster.address);
@@ -73,7 +75,10 @@ export default async function (hre : HardhatRuntimeEnvironment){
     // mint test tokens
     await( await erc20.mint(EMPTY_WALLET_ADDRESS, ethers.utils.parseEther("100"))).wait();
 
-    console.log("Wallet balance : ", await erc20.balanceOf(EMPTY_WALLET_ADDRESS));
+    console.log("Wallet balance : ", (await erc20.balanceOf(EMPTY_WALLET_ADDRESS)).toString());
+
+    const isValidIssuer = await issuerRegistry.isValidIssuer(issuerAddress);
+    console.log("isValidIssuer ( bool ) : ", isValidIssuer);
 
     // write new deployed contracts addresses to file;
     let contracts = {

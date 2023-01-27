@@ -5,8 +5,10 @@ import EthCrypto, { sign, util } from 'eth-crypto';
 import { Deployer } from '@matterlabs/hardhat-zksync-deploy';
 
 import { privateKey } from "../network_keys/secrets.json";
-import { defaultAbiCoder, keccak256, recoverAddress, solidityPack } from 'ethers/lib/utils';
+import { defaultAbiCoder, keccak256, parseEther, recoverAddress, solidityPack } from 'ethers/lib/utils';
 import {paymaster, filteredPool, erc20} from "../addresses.json";
+
+const decimals = ethers.BigNumber.from(10).pow(18);
 
 const PAYMASTER_ADDRESS = paymaster;
 
@@ -21,6 +23,8 @@ const EMPTY_WALLET_PRIVATE_KEY = "0x9f1f9daa4d7093111684d7043824bc98a863444cd1a9
 const ISSUER_ADDRESS = EthCrypto.publicKey.toAddress(EthCrypto.publicKeyByPrivateKey(privateKeyIssuer));
 
 const WALLET_ADDRESS = "0xB5a045b7352dB0A2c08228b60629a94CDc09A651";
+
+const NETWORK_URL = 'https://zksync2-testnet.zksync.dev';
 
 const fundPaymaster = async (hre: HardhatRuntimeEnvironment, provider: any, valueToSend: any) => {
 
@@ -37,10 +41,15 @@ const fundPaymaster = async (hre: HardhatRuntimeEnvironment, provider: any, valu
 }
 
 const currentTimestamp = async (hre: HardhatRuntimeEnvironment) => {
-    const provider = new Provider(hre.config.zkSyncDeploy.zkSyncNetwork);   
+    const provider = new Provider(NETWORK_URL);   
     const blockNum = provider.getBlockNumber();
     const block = await provider.getBlock(blockNum);
     return block.timestamp;
+}
+
+const getMinTokenAllowance = async( requiredETH : ethers.BigNumberish ) => {
+    // TODO ;
+    return ethers.BigNumber.from(2).mul(decimals);
 }
 
 const preparePureFiPaymasterParams = async (
@@ -71,22 +80,18 @@ const preparePureFiPaymasterParams = async (
 
     const signature = await _signPureFiPackage(timestamp, pureFiPackage, privateKeyIssuer);
 
-
-    // console.log("Signature : ", signature);
-
-    // console.log("timestamp + package hash :", defaultAbiCoder.encode(
-    //     ["uint64", "bytes"],
-    //     [timestamp, pureFiPackage]
-    // ));
-
-
     const pureFiData = await _packPureFiData(timestamp, signature, pureFiPackage);
+
+    const allowance = await getMinTokenAllowance(0);
+
 
     const paymasterParams = utils.getPaymasterParams(
         PAYMASTER_ADDRESS,
         {
-            type: "General",
-            innerInput: pureFiData
+            type : 'ApprovalBased',
+            token : TEST_TOKEN_ADDRESS,
+            minimalAllowance : allowance,
+            innerInput : pureFiData
         }
     );
     return paymasterParams;
@@ -149,7 +154,7 @@ const _packPureFiData = async (timestamp: number, signature: any, pureFiPackage:
 
 export default async function (hre: HardhatRuntimeEnvironment) {
 
-    const provider = new Provider(hre.config.zkSyncDeploy.zkSyncNetwork);
+    const provider = new Provider(NETWORK_URL);
 
     const wallet = new Wallet(privateKey, provider);
 
@@ -168,9 +173,6 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const paymasterArtifact = hre.artifacts.readArtifactSync("PureFiPaymaster");
     const paymaster = new ethers.Contract(PAYMASTER_ADDRESS, paymasterArtifact.abi);
 
-    // empty wallet erc20 balance 
-    console.log("Empty wallet balance : ", await (await erc20.connect(emptyWallet).balanceOf(emptyWallet.address)).toString());
-
     const depositAmount = ethers.utils.parseEther('1');
 
     // approve
@@ -188,7 +190,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
         let gasPrice = await provider.getGasPrice();
 
-        let gasLimit = await erc20.connect(emptyWallet).estimateGas.approve(
+        let gasLimit = await erc20.connect(wallet).estimateGas.approve(
             filteredPool.address,
             depositAmount,
             {
@@ -201,14 +203,19 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                 }
             });
 
+        // magic value for successful tx    
+        gasLimit = gasLimit.mul(5);
+
         console.log("Approve gas limit : ", gasLimit.toString());
+
         let fee = gasPrice.mul(gasLimit);
 
         console.log("Fee for ERC20 approve : ", fee.toString());
+
         let valueToSend = fee;
         await fundPaymaster(hre, provider, valueToSend);
 
-        await (
+        const tx = await (
             await erc20.connect(emptyWallet).approve(
                 filteredPool.address,
                 depositAmount,
@@ -223,6 +230,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                     },
                 })
         ).wait();
+
+        console.log("Tx :\n", tx);
 
         console.log("Success approve");
         console.log("Allowance : ", await (await erc20.connect(emptyWallet).allowance(emptyWallet.address, filteredPool.address)).toString());
@@ -251,8 +260,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
             filteredPool.address,
             erc20.address,
             depositAmount);
-
-        const gasLimit = await filteredPool.connect(emptyWallet).estimateGas.depositTo(
+        
+        let gasLimit = await filteredPool.connect(emptyWallet).estimateGas.depositTo(
             depositAmount,
             emptyWallet.address,
             {
@@ -265,8 +274,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                 }
             });
 
-        console.log("Gas limit : ", gasLimit.toString());
-
+        // magic value for successful tx
+        gasLimit = gasLimit.mul(5);    
         console.log("DepositTo Gas Limit : ", gasLimit.toString());
 
         let fee = gasPrice.mul(gasLimit);
@@ -276,6 +285,16 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
         const paymasterBalanceAfter = await provider.getBalance(paymaster.address);
         console.log("Paymaster balance after funding : ", paymasterBalanceAfter.toString());
+
+        //balances before deposit
+        const emptyWalletBalanceBefore = await (await erc20.connect(emptyWallet).balanceOf(emptyWallet.address)).toString();
+        console.log("Empty wallet balance before deposit: ", emptyWalletBalanceBefore);
+
+        const filteredPoolBalanceBefore = await (await erc20.connect(emptyWallet).balanceOf(filteredPool.address)).toString();
+        console.log("FilteredPool balance before : ", filteredPoolBalanceBefore);
+
+        const erc20PaymasterBalanceBefore = await (await erc20.connect(emptyWallet).balanceOf(paymaster.address)).toString();
+        console.log("ERC20 paymaster balance before deposit : ", erc20PaymasterBalanceBefore);
 
         const tx = await (await filteredPool.connect(emptyWallet).depositTo(
             depositAmount,
@@ -297,6 +316,17 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     const paymasterBalanceAfterDeposit = await provider.getBalance(paymaster.address);
     console.log("Paymaster balance after deposit: ", paymasterBalanceAfterDeposit.toString());
+
+
+    //balances before deposit
+    const emptyWalletBalanceAfter = await (await erc20.connect(emptyWallet).balanceOf(emptyWallet.address)).toString();
+    console.log("Empty wallet balance after deposit: ", emptyWalletBalanceAfter);
+
+    const filteredPoolBalanceAfter = await (await erc20.connect(emptyWallet).balanceOf(filteredPool.address)).toString()
+    console.log("FilteredPool balance after : ", filteredPoolBalanceAfter);
+
+    const erc20PaymasterBalanceAfter = await (await erc20.connect(emptyWallet).balanceOf(paymaster.address)).toString();
+    console.log("ERC20 paymaster balance after deposit : ", erc20PaymasterBalanceAfter);
 
     
 }
