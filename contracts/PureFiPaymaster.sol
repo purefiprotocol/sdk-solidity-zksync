@@ -70,7 +70,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000003;
+        return 2000004;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
