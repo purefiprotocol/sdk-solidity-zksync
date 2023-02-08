@@ -190,12 +190,12 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
         let gasPrice = await provider.getGasPrice();
 
-        let gasLimit = await erc20.connect(wallet).estimateGas.approve(
+        let gasLimit = await erc20.connect(emptyWallet).estimateGas.approve(
             filteredPool.address,
             depositAmount,
             {
                 customData: {
-                    ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT,
+                    gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams: {
                         paymaster: paymasterParams.paymaster,
                         paymasterInput: paymasterParams.paymasterInput
@@ -203,8 +203,6 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                 }
             });
 
-        // magic value for successful tx    
-        gasLimit = gasLimit.mul(5);
 
         console.log("Approve gas limit : ", gasLimit.toString());
 
@@ -226,7 +224,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                     //paymaster info
                     customData: {
                         paymasterParams,
-                        ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT
+                        gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT
                     },
                 })
         ).wait();
@@ -266,7 +264,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
             emptyWallet.address,
             {
                 customData: {
-                    ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT,
+                    gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams: {
                         paymaster: paymasterParams.paymaster,
                         paymasterInput: paymasterParams.paymasterInput
@@ -274,8 +272,6 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                 }
             });
 
-        // magic value for successful tx
-        gasLimit = gasLimit.mul(5);    
         console.log("DepositTo Gas Limit : ", gasLimit.toString());
 
         let fee = gasPrice.mul(gasLimit);
@@ -304,7 +300,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
                 maxPriorityFeePerGas: gasPrice,
                 gasLimit : gasLimit,
                 customData: {
-                    ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT,
+                    gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams: {
                         paymaster: paymasterParams.paymaster,
                         paymasterInput: paymasterParams.paymasterInput

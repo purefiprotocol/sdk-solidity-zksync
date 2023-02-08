@@ -4,12 +4,12 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import {IPaymaster, ExecutionResult} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
 import {IPaymasterFlow} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
-import {TransactionHelper, Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/TransactionHelper.sol";
+import {Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
 
 import "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 
 // import "@openzeppelin/contracts/interfaces/IERC20.sol";
-
+import {IERC20} from "@matterlabs/zksync-contracts/l2/system-contracts/openzeppelin/token/ERC20/IERC20.sol";
 import "./interfaces/IPureFiTxContext.sol";
 import "./libraries/SignLib.sol";
 import "./libraries/BytesLib.sol";
@@ -36,13 +36,13 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     mapping (address => PureFiContext) contextData; //context data structure
 
+    mapping ( address => bool ) whitelistedTokens; 
+
     IPureFiIssuerRegistry issuerRegistry;
 
     address public pureFiSubscriptionContract;
 
-    address public allowedToken;
-
-    address public oracle;
+    address public router;
 
     modifier onlyBootloader() {
         require(
@@ -57,20 +57,25 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         address _admin,
         address _subscriptionContract,
         address _issuerRegistry,
-        address _allowedToken,
-        address _oracle
+        address _router,
+        address[] memory _whitelistedTokens
         ) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         pureFiSubscriptionContract = _subscriptionContract; //this is to validate the PureFi subscription in future. 
         graceTime = 180;//3 min - default value;
         issuerRegistry = IPureFiIssuerRegistry(_issuerRegistry);
-        allowedToken = _allowedToken;
-        oracle = _oracle;
+        router = _router;
+
+        if (_whitelistedTokens.length > 0){
+            for(uint i = 0; i < _whitelistedTokens.length; i++){
+                whitelistedTokens[_whitelistedTokens[i]] = true;
+            }
+        }
     }
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000004;
+        return 2000005;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -81,7 +86,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         bytes32 _txHash,
         bytes32 _suggestedSignedHash,
         Transaction calldata _transaction
-    ) external payable override onlyBootloader returns (bytes memory context) {
+    ) external payable override onlyBootloader returns (bytes4 magic, bytes memory context) {
         require(
             _transaction.paymasterInput.length >= 4,
             "PureFiPaymaster: The standard paymaster input must be at least 4 bytes long"
@@ -98,16 +103,16 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
                     _transaction.paymasterInput[4:],
                      (address, uint256, bytes)
                     );
-            require(token == allowedToken, "PureFiPaymaster : Incorrect input token");
+            require(_isWhitelisted(token), "PureFiPaymaster : Incorrect input token");
 
-            uint256 requiredETH = _transaction.ergsLimit *
-                _transaction.maxFeePerErg;
+            uint256 requiredETH = _transaction.gasLimit *
+                _transaction.maxFeePerGas;
 
-            uint256 requiredTokenAmount = _getMinPurefiTokenAmount(requiredETH);
+            uint256 requiredTokenAmount = _getMinTokenAmount(token, requiredETH);
             require(minAllowance >= requiredTokenAmount, "PureFiPaymaster : Incorrect input min allowance");
             
             address userAddress = address(uint160(_transaction.from));
-            uint256 providedAllowance = IERC20(allowedToken).allowance(userAddress, address(this));
+            uint256 providedAllowance = IERC20(token).allowance(userAddress, address(this));
 
             require(providedAllowance >= requiredTokenAmount, "PureFiPaymaster : Insufficient allowance");
 
@@ -133,7 +138,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             // neither paymaster nor account are allowed to access this context variable.
 
             require(
-                IERC20(allowedToken).transferFrom(userAddress, address(this), requiredTokenAmount), 
+                IERC20(token).transferFrom(userAddress, address(this), requiredTokenAmount), 
                 "PureFiPaymaster : TransferFrom failed"
                 );
 
@@ -147,6 +152,9 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         else {
             revert("Unsupported paymaster flow");
         }
+
+        // TODO : check docs for this moment;
+        magic = IPaymaster.validateAndPayForPaymasterTransaction.selector;
     }
 
     function getPureFiContextData(address _contextAddr) external view returns (
@@ -172,16 +180,15 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             context.payload
         );
     }
-
-    function postOp(
+    function postTransaction(
         bytes calldata _context,
         Transaction calldata _transaction,
         bytes32 _txHash,
         bytes32 _suggestedSignedHash,
         ExecutionResult _txResult,
-        uint256 _maxRefundedErgs
-    ) external payable onlyBootloader {
-        //MIHA: no storage writing operations here. results in CALL_EXCEPTION
+        uint256 _maxRefundedGas
+    ) external override payable{
+
     }
 
     receive() external payable {}
@@ -201,9 +208,17 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             );
     }
 
-    // get minimal amount of PureFi tokens for refunding transaction
-    function _getMinPurefiTokenAmount( uint256 _requiredETH ) private view returns(uint256 pureFiTokenAmount) {
+    // get minimal amount of tokens for refunding transaction
+    function _getMinTokenAmount( address token, uint256 _requiredETH ) private view returns(uint256 tokenAmount) {
         //TODO
         return 2*(10**18);
+    }
+
+    function _isWhitelisted(address _token) internal view returns (bool){
+        return whitelistedTokens[_token];
+    }
+
+    function isWhitelisted(address _token) public view returns (bool){
+        return _isWhitelisted(_token);
     }
 }

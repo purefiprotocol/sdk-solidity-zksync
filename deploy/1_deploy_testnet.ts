@@ -55,8 +55,8 @@ export default async function (hre : HardhatRuntimeEnvironment){
         wallet.address,
         PLUG_ADDRESS,
         issuerRegistry.address,
-        erc20.address,
-        PLUG_ADDRESS
+        PLUG_ADDRESS,
+        [erc20.address]
     ]);
 
     console.log("Paymaster address : ", paymaster.address);

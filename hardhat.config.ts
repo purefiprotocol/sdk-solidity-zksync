@@ -6,7 +6,7 @@ import { HardhatUserConfig } from 'hardhat/types';
 
 module.exports = {
   zksolc: {
-    version: "1.2.3",
+    version: "1.3.1",
     compilerSource: "binary",
     settings: {},
   },
