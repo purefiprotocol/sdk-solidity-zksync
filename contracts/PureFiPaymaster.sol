@@ -8,13 +8,13 @@ import {Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/libr
 
 import "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 
-// import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {IERC20} from "@matterlabs/zksync-contracts/l2/system-contracts/openzeppelin/token/ERC20/IERC20.sol";
 import "./interfaces/IPureFiTxContext.sol";
 import "./libraries/SignLib.sol";
 import "./libraries/BytesLib.sol";
 import "./PureFiData.sol";
 import "./interfaces/IPureFiIssuerRegistry.sol";
+import "./interfaces/IPureFiPlugin.sol";
 
 
 contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext, PureFiDataUtils{
@@ -36,13 +36,18 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     mapping (address => PureFiContext) contextData; //context data structure
 
-    mapping ( address => bool ) whitelistedTokens; 
+    mapping ( address => bool ) whitelistedTokensMap;
+
+    address[] whitelistedTokensArr;
 
     IPureFiIssuerRegistry issuerRegistry;
 
     address public pureFiSubscriptionContract;
 
     address public router;
+
+    event WhitelistToken( address indexed token );
+    event DelistToken( address indexed token );
 
     modifier onlyBootloader() {
         require(
@@ -66,16 +71,17 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         issuerRegistry = IPureFiIssuerRegistry(_issuerRegistry);
         router = _router;
 
+        whitelistedTokensArr = _whitelistedTokens;
         if (_whitelistedTokens.length > 0){
             for(uint i = 0; i < _whitelistedTokens.length; i++){
-                whitelistedTokens[_whitelistedTokens[i]] = true;
+                whitelistedTokensMap[_whitelistedTokens[i]] = true;
             }
         }
     }
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000005;
+        return 2000006;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -208,14 +214,65 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             );
     }
 
+    function swapTokens() external onlyRole(DEFAULT_ADMIN_ROLE) returns(uint256){
+
+        for(uint i = 0; i < whitelistedTokensArr.length; i++){
+            uint256 balance = IERC20(whitelistedTokensArr[i]).balanceOf(address(this));
+            require(
+                IERC20(whitelistedTokensArr[i]).approve(router, balance), 
+                "PureFiPaymaster : Token approve fail"
+                );
+        }
+        
+        return IPureFiPlugin(router).swapTokens();
+    }
+
+
+    function whitelistToken( address _token ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        require(_token != address(0), "PureFiPaymaster : Incorrect token address");
+        if( !_isWhitelisted(_token) ){
+            whitelistedTokensMap[_token] = true;
+            whitelistedTokensArr.push(_token);
+            
+            require(
+                IPureFiPlugin(router).whitelistToken(_token), 
+                "PureFiPaymaster : whitelistToken fail" 
+            );
+
+            emit WhitelistToken(_token);
+        }
+    }
+
+    function delistToken( address _token ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        require( isWhitelisted(_token), "PureFiPaymaster : Token does not exist" );
+
+        whitelistedTokensMap[_token] = false;
+    
+        uint256 tokensLength = whitelistedTokensArr.length;
+
+        for( uint i = 0; i < tokensLength; i++){
+            if(whitelistedTokensArr[i] == _token){
+                whitelistedTokensArr[i] = whitelistedTokensArr[tokensLength];
+                whitelistedTokensArr.pop();
+
+                require(
+                    IPureFiPlugin(router).delistToken(_token), 
+                    "PureFiPaymaster : delistToken fail"
+                );
+                emit DelistToken(_token);
+                return;
+            }
+        }
+    }
+
+
     // get minimal amount of tokens for refunding transaction
-    function _getMinTokenAmount( address token, uint256 _requiredETH ) private view returns(uint256 tokenAmount) {
-        //TODO
-        return 2*(10**18);
+    function _getMinTokenAmount( address token, uint256 requiredETH ) private view returns(uint256 tokenAmount) {
+        return IPureFiPlugin(router).getMinTokensAmountForETH(token, requiredETH);
     }
 
     function _isWhitelisted(address _token) internal view returns (bool){
-        return whitelistedTokens[_token];
+        return whitelistedTokensMap[_token];
     }
 
     function isWhitelisted(address _token) public view returns (bool){
