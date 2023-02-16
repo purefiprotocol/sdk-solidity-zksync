@@ -131,6 +131,7 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
 
     // set pool fee for pair token/WETH
     function setPoolFee( address _token, uint24 _fee ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        // TODO : check for pool existance;
         require(_fee > 0, "PureFiUniswapV3Plugin : Incorrect fee value");
         poolFees[_token] = _fee;
     }
@@ -147,7 +148,7 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
         uint256 tokensLength = whitelistedTokensArr.length; 
         for(uint i = 0; i < tokensLength; i++){
             if( whitelistedTokensArr[i] == _token ){
-                whitelistedTokensArr[i] = whitelistedTokensArr[tokensLength];
+                whitelistedTokensArr[i] = whitelistedTokensArr[tokensLength - 1];
                 whitelistedTokensArr.pop();
                 emit DelistToken(_token);
                 return true;

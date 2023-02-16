@@ -44,7 +44,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     address public pureFiSubscriptionContract;
 
-    address public router;
+    address public exchangePlugin;
 
     event WhitelistToken( address indexed token );
     event DelistToken( address indexed token );
@@ -62,14 +62,12 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         address _admin,
         address _subscriptionContract,
         address _issuerRegistry,
-        address _router,
         address[] memory _whitelistedTokens
         ) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         pureFiSubscriptionContract = _subscriptionContract; //this is to validate the PureFi subscription in future. 
         graceTime = 180;//3 min - default value;
         issuerRegistry = IPureFiIssuerRegistry(_issuerRegistry);
-        router = _router;
 
         whitelistedTokensArr = _whitelistedTokens;
         if (_whitelistedTokens.length > 0){
@@ -81,7 +79,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000006;
+        return 2000007;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -219,12 +217,12 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         for(uint i = 0; i < whitelistedTokensArr.length; i++){
             uint256 balance = IERC20(whitelistedTokensArr[i]).balanceOf(address(this));
             require(
-                IERC20(whitelistedTokensArr[i]).approve(router, balance), 
+                IERC20(whitelistedTokensArr[i]).approve(exchangePlugin, balance), 
                 "PureFiPaymaster : Token approve fail"
                 );
         }
         
-        return IPureFiPlugin(router).swapTokens();
+        return IPureFiPlugin(exchangePlugin).swapTokens();
     }
 
 
@@ -235,7 +233,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             whitelistedTokensArr.push(_token);
             
             require(
-                IPureFiPlugin(router).whitelistToken(_token), 
+                IPureFiPlugin(exchangePlugin).whitelistToken(_token), 
                 "PureFiPaymaster : whitelistToken fail" 
             );
 
@@ -252,11 +250,11 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
         for( uint i = 0; i < tokensLength; i++){
             if(whitelistedTokensArr[i] == _token){
-                whitelistedTokensArr[i] = whitelistedTokensArr[tokensLength];
+                whitelistedTokensArr[i] = whitelistedTokensArr[tokensLength - 1 ];
                 whitelistedTokensArr.pop();
 
                 require(
-                    IPureFiPlugin(router).delistToken(_token), 
+                    IPureFiPlugin(exchangePlugin).delistToken(_token), 
                     "PureFiPaymaster : delistToken fail"
                 );
                 emit DelistToken(_token);
@@ -265,10 +263,14 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         }
     }
 
+    function setPlugin( address _plugin) external onlyRole(DEFAULT_ADMIN_ROLE){
+        exchangePlugin = _plugin;
+    }
+
 
     // get minimal amount of tokens for refunding transaction
     function _getMinTokenAmount( address token, uint256 requiredETH ) private view returns(uint256 tokenAmount) {
-        return IPureFiPlugin(router).getMinTokensAmountForETH(token, requiredETH);
+        return IPureFiPlugin(exchangePlugin).getMinTokensAmountForETH(token, requiredETH);
     }
 
     function _isWhitelisted(address _token) internal view returns (bool){
@@ -277,5 +279,9 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function isWhitelisted(address _token) public view returns (bool){
         return _isWhitelisted(_token);
+    }
+
+    function getWhitelistedTokens() external view returns(address[] memory whitelistedTokens){
+        whitelistedTokens = whitelistedTokensArr;
     }
 }

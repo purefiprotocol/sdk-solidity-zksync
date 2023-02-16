@@ -17,6 +17,7 @@ const EMPTY_WALLET_ADDRESS = "0x4DF6Ba41aAF6209A9C47856feF7Fb8058e93d7Ae";
 
 const NETWORK_URL = 'https://zksync2-testnet.zksync.dev';
 
+const TEST_WETH  = "0x2075860EF318824804a5C08256909628E513D43e";
 
 export default async function (hre : HardhatRuntimeEnvironment){
 
@@ -28,13 +29,30 @@ export default async function (hre : HardhatRuntimeEnvironment){
 
     // deploy erc20
     const erc20Artifact = await deployer.loadArtifact("MyERC20");
-    const erc20 = await deployer.deploy(erc20Artifact, [
-        "TestToken",
+    
+    const usdc = await deployer.deploy(erc20Artifact, [
+        "USDCtest",
+        "USDCT",
+        6
+    ]);
+
+    const usdt = await deployer.deploy(erc20Artifact,[
+        "USDTtest",
+        "USDTT",
+        6
+    ]);
+
+    const testToken = await deployer.deploy(erc20Artifact,[
+        "TST",
         "TST",
         18
     ]);
 
-    console.log("ERC20 address : ", erc20.address);
+    console.log("USDC test address : ", usdc.address);
+
+    console.log("USDT test address : ", usdt.address);
+
+    console.log("TST address : ", testToken.address);
 
     const issuerAddress = EthCrypto.publicKey.toAddress(EthCrypto.publicKeyByPrivateKey(privateKeyIssuer));
 
@@ -48,23 +66,36 @@ export default async function (hre : HardhatRuntimeEnvironment){
 
     // register issuer 
     await issuerRegistry.register(issuerAddress, "0x0000000000000000000000000000000000000000000000000000000000000001");
-
+    const whitelistedTokens = [ usdc.address, usdt.address ];
     // deploy paymaster
     const paymasterArtifact = await deployer.loadArtifact("PureFiPaymaster");
     const paymaster = await deployer.deploy(paymasterArtifact, [
         wallet.address,
         PLUG_ADDRESS,
         issuerRegistry.address,
-        PLUG_ADDRESS,
-        [erc20.address]
+        whitelistedTokens
     ]);
 
     console.log("Paymaster address : ", paymaster.address);
 
+     // deploy mock_plugin
+     const mockPluginArtifact = await deployer.loadArtifact("MockUniswapPlugin");
+     const mockPlugin = await deployer.deploy(mockPluginArtifact, [
+        whitelistedTokens,
+        TEST_WETH,
+        paymaster.address
+     ]);
+
+     console.log("mockPlugin address : ", mockPlugin.address);
+
+    // set plugin for paymaster
+    await paymaster.setPlugin(mockPlugin.address);
+
+
     // deploy test contract
     const testContractArtifact = await deployer.loadArtifact("FilteredPool");
     const testContract = await deployer.deploy(testContractArtifact, [
-        erc20.address,
+        testToken.address,
         paymaster.address
     ]);
 
@@ -73,9 +104,12 @@ export default async function (hre : HardhatRuntimeEnvironment){
 
 
     // mint test tokens
-    await( await erc20.mint(EMPTY_WALLET_ADDRESS, ethers.utils.parseEther("100"))).wait();
+    await( await usdc.mint(EMPTY_WALLET_ADDRESS, ethers.utils.parseEther("100"))).wait();
+    await( await usdt.mint(EMPTY_WALLET_ADDRESS, ethers.utils.parseEther("100"))).wait();
+    await( await testToken.mint(EMPTY_WALLET_ADDRESS, ethers.utils.parseEther("100"))).wait();
 
-    console.log("Wallet balance : ", (await erc20.balanceOf(EMPTY_WALLET_ADDRESS)).toString());
+
+    console.log("Wallet balance : ", (await usdc.balanceOf(EMPTY_WALLET_ADDRESS)).toString());
 
     const isValidIssuer = await issuerRegistry.isValidIssuer(issuerAddress);
     console.log("isValidIssuer ( bool ) : ", isValidIssuer);
@@ -84,7 +118,10 @@ export default async function (hre : HardhatRuntimeEnvironment){
     let contracts = {
         paymaster : paymaster.address,
         filteredPool : testContract.address,
-        erc20 : erc20.address
+        usdc : usdc.address,
+        usdt : usdt.address,
+        mockPlugin : mockPlugin.address,
+        testToken : testToken.address
     };
     let data = JSON.stringify(contracts);
 
