@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 import {IPaymaster, ExecutionResult} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
 import {IPaymasterFlow} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
 import {Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
-
-import "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
-
 import {IERC20} from "@matterlabs/zksync-contracts/l2/system-contracts/openzeppelin/token/ERC20/IERC20.sol";
-import "./interfaces/IPureFiTxContext.sol";
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
 import "./libraries/SignLib.sol";
 import "./libraries/BytesLib.sol";
+
 import "./PureFiData.sol";
 import "./interfaces/IPureFiIssuerRegistry.sol";
 import "./interfaces/IPureFiPlugin.sol";
+import "./interfaces/IPaymasterPluginCompatible.sol";
+import "./interfaces/IPureFiTxContext.sol";
 
-
-contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext, PureFiDataUtils{
+contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext, PureFiDataUtils, IPaymasterPluginCompatible{
 
     struct PureFiContext{
         uint64 validUntil;
@@ -38,11 +39,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     mapping ( address => bool ) whitelistedTokensMap;
 
-    address[] whitelistedTokensArr;
-
     IPureFiIssuerRegistry issuerRegistry;
-
-    address public pureFiSubscriptionContract;
 
     address public exchangePlugin;
 
@@ -54,22 +51,27 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             msg.sender == BOOTLOADER_FORMAL_ADDRESS,
             "PureFiPaymaster: Only bootloader can call this method"
         );
-        // Continure execution if called from the bootloader.
+        // Continue execution if called from the bootloader.
+        _;
+    }
+
+    modifier onlyPlugin() {
+        require(
+            msg.sender == exchangePlugin, 
+            "PureFiPaymaster : Only exchangePlugin can call this method"
+        );
         _;
     }
 
     constructor(
         address _admin,
-        address _subscriptionContract,
         address _issuerRegistry,
         address[] memory _whitelistedTokens
         ) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        pureFiSubscriptionContract = _subscriptionContract; //this is to validate the PureFi subscription in future. 
         graceTime = 180;//3 min - default value;
         issuerRegistry = IPureFiIssuerRegistry(_issuerRegistry);
 
-        whitelistedTokensArr = _whitelistedTokens;
         if (_whitelistedTokens.length > 0){
             for(uint i = 0; i < _whitelistedTokens.length; i++){
                 whitelistedTokensMap[_whitelistedTokens[i]] = true;
@@ -79,7 +81,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000007;
+        return 2000008;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -212,31 +214,25 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             );
     }
 
-    function swapTokens() external onlyRole(DEFAULT_ADMIN_ROLE) returns(uint256){
+    function approveTokenForPlugin(address _token, uint256 _amount) external onlyPlugin returns(bool){
+        uint256 balance = IERC20(_token).balanceOf(address(this));
 
-        for(uint i = 0; i < whitelistedTokensArr.length; i++){
-            uint256 balance = IERC20(whitelistedTokensArr[i]).balanceOf(address(this));
-            require(
-                IERC20(whitelistedTokensArr[i]).approve(exchangePlugin, balance), 
-                "PureFiPaymaster : Token approve fail"
-                );
-        }
-        
-        return IPureFiPlugin(exchangePlugin).swapTokens();
+        require(isWhitelisted(_token), "PureFiPaymaster : Token is not whitelisted");
+        require(balance >= _amount, "PureFiPaymaster : Amount too high");
+
+        require(
+            IERC20(_token).approve(exchangePlugin, _amount),
+            "PureFiPaymaster : Token approve fail"
+        );
+        return true;
     }
 
 
     function whitelistToken( address _token ) external onlyRole(DEFAULT_ADMIN_ROLE){
         require(_token != address(0), "PureFiPaymaster : Incorrect token address");
+
         if( !_isWhitelisted(_token) ){
             whitelistedTokensMap[_token] = true;
-            whitelistedTokensArr.push(_token);
-            
-            require(
-                IPureFiPlugin(exchangePlugin).whitelistToken(_token), 
-                "PureFiPaymaster : whitelistToken fail" 
-            );
-
             emit WhitelistToken(_token);
         }
     }
@@ -245,22 +241,8 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         require( isWhitelisted(_token), "PureFiPaymaster : Token does not exist" );
 
         whitelistedTokensMap[_token] = false;
-    
-        uint256 tokensLength = whitelistedTokensArr.length;
+        emit DelistToken(_token);
 
-        for( uint i = 0; i < tokensLength; i++){
-            if(whitelistedTokensArr[i] == _token){
-                whitelistedTokensArr[i] = whitelistedTokensArr[tokensLength - 1 ];
-                whitelistedTokensArr.pop();
-
-                require(
-                    IPureFiPlugin(exchangePlugin).delistToken(_token), 
-                    "PureFiPaymaster : delistToken fail"
-                );
-                emit DelistToken(_token);
-                return;
-            }
-        }
     }
 
     function setPlugin( address _plugin) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -281,7 +263,29 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         return _isWhitelisted(_token);
     }
 
-    function getWhitelistedTokens() external view returns(address[] memory whitelistedTokens){
-        whitelistedTokens = whitelistedTokensArr;
+    function withdrawETH( uint256 _amount, address _recipient ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        
+        require( address(this).balance >= _amount, "PureFiPaymaster : Insufficient funds" );
+        require(_recipient != address(0), "PureFiPaymaster : Incorrect address");
+
+        (bool sent, ) = payable(_recipient).call{value : _amount}("");
+        require(sent, "PureFiPaymaster : Failed to send Ether");
     }
+
+    function withdrawToken(
+        address _token, 
+        uint256 _amount, 
+        address _recipient
+    ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        require(_recipient != address(0), "PureFiPaymaster : Incorrect address");
+        
+        uint256 balance = IERC20(_token).balanceOf(address(this));
+        require(balance >= _amount, "PureFiPaymaster : Insufficient funds");
+
+        require(
+            IERC20(_token).transfer(_recipient, _amount),
+            "PureFiPaymaster : Transfer fail"    
+        );
+    }
+
 }

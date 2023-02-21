@@ -14,24 +14,4 @@ contract MockPureFiPaymaster {
         whitelistedTokensArr = _whitelistedTokens;
     }
 
-    function swapTokens() external returns(uint256 receivedETH) {
-        for(uint i = 0; i < whitelistedTokensArr.length; i++){
-            uint256 balance = IERC20(whitelistedTokensArr[i]).balanceOf(address(this));
-            require(
-                IERC20(whitelistedTokensArr[i]).approve(address(uniswapV3Plugin), balance),
-                "MockPaymaster : approve fail"    
-            );
-        }
-        receivedETH = IPureFiPlugin(uniswapV3Plugin).swapTokens();
-
-    }
-
-    function whitelistToken( address _token ) external{
-        require(uniswapV3Plugin.whitelistToken(_token));
-    }
-
-    function delistToken( address _token ) external{
-        require(uniswapV3Plugin.delistToken(_token));
-    }
-
 }
