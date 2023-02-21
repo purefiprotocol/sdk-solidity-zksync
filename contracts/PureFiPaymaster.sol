@@ -19,6 +19,7 @@ import "./interfaces/IPaymasterPluginCompatible.sol";
 import "./interfaces/IPureFiTxContext.sol";
 
 contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext, PureFiDataUtils, IPaymasterPluginCompatible{
+    uint32 constant DENOM_PERCENTAGE = 10000;
 
     struct PureFiContext{
         uint64 validUntil;
@@ -42,6 +43,8 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
     IPureFiIssuerRegistry issuerRegistry;
 
     address public exchangePlugin;
+
+    uint32 overheadPercentage; // extra amount for compensation of price volatility // 100% = 10_000
 
     event WhitelistToken( address indexed token );
     event DelistToken( address indexed token );
@@ -71,7 +74,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         graceTime = 180;//3 min - default value;
         issuerRegistry = IPureFiIssuerRegistry(_issuerRegistry);
-
+        overheadPercentage = 2000; // 20%;
         if (_whitelistedTokens.length > 0){
             for(uint i = 0; i < _whitelistedTokens.length; i++){
                 whitelistedTokensMap[_whitelistedTokens[i]] = true;
@@ -81,7 +84,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000008;
+        return 2000009;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -252,7 +255,8 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     // get minimal amount of tokens for refunding transaction
     function _getMinTokenAmount( address token, uint256 requiredETH ) private view returns(uint256 tokenAmount) {
-        return IPureFiPlugin(exchangePlugin).getMinTokensAmountForETH(token, requiredETH);
+        uint256 minAmount = IPureFiPlugin(exchangePlugin).getMinTokensAmountForETH(token, requiredETH);
+        tokenAmount = minAmount * (DENOM_PERCENTAGE + overheadPercentage) / DENOM_PERCENTAGE;
     }
 
     function _isWhitelisted(address _token) internal view returns (bool){
@@ -286,6 +290,11 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             IERC20(_token).transfer(_recipient, _amount),
             "PureFiPaymaster : Transfer fail"    
         );
+    }
+
+    function setOverheadPercentage( uint32 _percentage ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        require(_percentage > 0, "PureFiPaymaster : Incorrect percentage");
+        overheadPercentage = _percentage;
     }
 
 }

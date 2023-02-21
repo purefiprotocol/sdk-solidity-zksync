@@ -16,10 +16,13 @@ import "./interfaces/IPaymasterPluginCompatible.sol";
 
 
 contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
+    uint32 constant DENOM_PERCENTAGE = 10000;
+
     IUniswapV3Factory uniswapV3Factory;
     ISwapRouter uniswapV3Router;
     address public paymaster;
     IWETH9 WETH;
+    uint32 slippage;
 
     mapping(address => uint24) public poolFees;
 
@@ -37,6 +40,7 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
         uniswapV3Factory = IUniswapV3Factory(_uniswapV3Factory);
         paymaster = _paymaster;
         WETH = IWETH9(_WETH);
+        slippage = 30; // 0.3%
     }
 
     modifier onlyPaymaster() {
@@ -49,7 +53,7 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
 
     function version() external pure returns (uint256) {
         //xxx.yyy.zzz
-        return 1000002;
+        return 1000003;
     }
 
     function swapToken( 
@@ -70,12 +74,9 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
         );
 
         //swap
-        uint256 minAmountOut = _getMinTokensAmount(
-            _token, 
-            address(WETH), 
-            _amount,
-            _getPoolFee(_token)
-        );
+        uint24 poolFee = _getPoolFee(_token);
+        uint256 maxAmountOut = _getAmountOut(_amount, _token, address(WETH), poolFee);
+        uint256 minAmountOut = maxAmountOut * ( DENOM_PERCENTAGE - slippage ) / DENOM_PERCENTAGE;
 
         receivedETH = _swapToken(_token, _amount, minAmountOut);
     }
@@ -119,42 +120,58 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
         poolFees[_token] = _fee;
     }
 
-
     function getMinTokensAmountForETH(
         address _token,
         uint256 _requiredETH
     ) external view override returns (uint256 tokenAmountIn) {
 
         uint24 fee = _getPoolFee(_token);
-        tokenAmountIn = _getMinTokensAmount(address(WETH), _token, _requiredETH, fee);
+        tokenAmountIn = _getAmountIn(_requiredETH, _token, address(WETH), fee);
     }
 
-    function _getMinTokensAmount(
-        address _token0,
-        address _token1,
-        uint256 _amount0,
+    // get maximum output amount of tokenOut for _amountIn _tokenIn
+    function _getAmountOut( 
+        uint256 _amountIn, 
+        address _tokenIn, 
+        address _tokenOut,
         uint24 _fee
-    ) internal view returns (uint256 _amount1) {
-        address pool = uniswapV3Factory.getPool(_token0, _token1, _fee);
-        require(
-            pool != address(0),
-            "PureFiUniswapV3Plugin : Pool does not exist"
-        );
-
+    ) internal view returns (uint256 _amountOut){
+        address pool = uniswapV3Factory.getPool(_tokenIn, _tokenOut, _fee);
+        require(pool != address(0),"PureFiUniswapV3Plugin : Pool does not exist");
         // get current tokens ratio
         (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
 
-        if (_token0 < _token1) {
-            //  ratio = _token1 / _token0; => _amount1 = ratio * amount(_token0) => _amount1 = ratio * _amount0
-            _amount1 =
-                (((_amount0 * sqrtPriceX96) / 2 ** 96) * sqrtPriceX96) /
-                2 ** 96;
-        } else {
-            // ratio = _token0 / _token1; => _token1 = _token0 / ratio; => _amount1 = _amount0 / ratio
-            _amount1 =
-                (((_amount0 * 2 ** 96) / sqrtPriceX96) * 2 ** 96) /
-                sqrtPriceX96;
+        uint256 amountInWithFee = _amountIn * ( DENOM_PERCENTAGE - _fee ) / DENOM_PERCENTAGE;
+        
+        if( _tokenIn < _tokenOut){
+            //  ratio = _tokenOut / _tokenIn; => _amountOut = ratio * amount(_tokenIn) => _amountOut = ratio * _amountIn
+            _amountOut = (((amountInWithFee * sqrtPriceX96) / 2 ** 96) * sqrtPriceX96) / 2 ** 96;
+        }else{
+            _amountOut = (((amountInWithFee * 2 ** 96) / sqrtPriceX96) * 2 ** 96) / sqrtPriceX96;
         }
+    }
+    // get minimum amount of _tokenIn for getting _amountOut of _tokenOut
+    function _getAmountIn(
+        uint256 _amountOut,
+        address _tokenIn,
+        address _tokenOut,
+        uint24 _fee
+    ) internal view returns( uint256 _amountIn ){
+        address pool = uniswapV3Factory.getPool(_tokenIn, _tokenOut, _fee);
+        require(pool != address(0),"PureFiUniswapV3Plugin : Pool does not exist");
+        // get current tokens ratio
+        (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+
+        if( _tokenIn < _tokenOut ){
+            // ratio = _tokenOut / _tokenIn; => _tokenIn = _tokenOut / ratio;
+            _amountIn = (((_amountOut * 2**96) / sqrtPriceX96) * 2**96) / sqrtPriceX96;
+        }else{
+            // ratio = _tokenIn / _tokenOut; => _tokenIn = ratio * _tokenOut;
+            _amountIn = (((_amountOut * sqrtPriceX96) / 2**96) * sqrtPriceX96) / 2**96;
+        }
+        // add extra amount for fee compensation;
+        _amountIn = _amountIn * (DENOM_PERCENTAGE + _fee) / DENOM_PERCENTAGE;
+
     }
 
     function _getPoolFee(address _token) private view returns(uint24 fee){
@@ -188,4 +205,8 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
         require(sent, "PureFiUniswapV3Plugin : Failed to send Ether");
     }
 
+    function setSlippage( uint32 _slippage ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        require(_slippage > 0, "PureFiUniswapV3Plugin : Incorrect slippage");
+        slippage = _slippage;
+    }
 }
