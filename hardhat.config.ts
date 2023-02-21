@@ -2,11 +2,12 @@ import '@matterlabs/hardhat-zksync-deploy';
 import '@matterlabs/hardhat-zksync-solc';
 import 'hardhat-abi-exporter';
 import { HardhatUserConfig } from 'hardhat/types';
+import { infuraApiKey } from "./network_keys/secrets.json"
 
 
 module.exports = {
   zksolc: {
-    version: "1.3.1",
+    version: "1.3.5",
     compilerSource: "binary",
     settings: {},
   },
