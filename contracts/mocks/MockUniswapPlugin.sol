@@ -7,21 +7,14 @@ import "../interfaces/UniswapV3/IWETH9.sol";
 
 contract MockUniswapPlugin is IPureFiPlugin {
     IWETH9 weth;
-    address[] public whitelistedTokensArr;
-    mapping(address => bool) public whitelistedTokensMap;
     address paymaster;
 
     constructor(
-        address[] memory _whitelistedTokens,
         address _weth,
         address _paymaster
     ) {
         weth = IWETH9(_weth);
         paymaster = _paymaster;
-        whitelistedTokensArr = _whitelistedTokens;
-        for (uint i = 0; i < _whitelistedTokens.length; i++) {
-            whitelistedTokensMap[_whitelistedTokens[i]] = true;
-        }
     }
 
     function getMinTokensAmountForETH(

@@ -19,7 +19,7 @@ import "./interfaces/IPaymasterPluginCompatible.sol";
 import "./interfaces/IPureFiTxContext.sol";
 
 contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext, PureFiDataUtils, IPaymasterPluginCompatible{
-    uint32 constant DENOM_PERCENTAGE = 10000;
+    uint32 constant public DENOM_PERCENTAGE = 10000;
 
     struct PureFiContext{
         uint64 validUntil;
@@ -44,7 +44,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     address public exchangePlugin;
 
-    uint32 overheadPercentage; // extra amount for compensation of price volatility // 100% = 10_000
+    uint32 public overheadPercentage; // extra amount for compensation of price volatility // 100% = 10_000
 
     event WhitelistToken( address indexed token );
     event DelistToken( address indexed token );
@@ -84,7 +84,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
 
     function version() external pure returns(uint256){
         //xxx.yyy.zzz
-        return 2000009;
+        return 2000010;
     }
 
     function setGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE){

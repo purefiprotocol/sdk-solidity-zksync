@@ -6,6 +6,8 @@ import { Deployer } from '@matterlabs/hardhat-zksync-deploy';
 
 import { privateKey } from "../network_keys/secrets.json";
 import fs from 'fs';
+import { Address } from 'zksync-web3/build/src/types';
+import { arrayify } from 'ethers/lib/utils';
 
 
 const PLUG_ADDRESS = "0x0000000000000000000000000000000000000001";
@@ -71,7 +73,6 @@ export default async function (hre : HardhatRuntimeEnvironment){
     const paymasterArtifact = await deployer.loadArtifact("PureFiPaymaster");
     const paymaster = await deployer.deploy(paymasterArtifact, [
         wallet.address,
-        PLUG_ADDRESS,
         issuerRegistry.address,
         whitelistedTokens
     ]);
@@ -81,7 +82,6 @@ export default async function (hre : HardhatRuntimeEnvironment){
      // deploy mock_plugin
      const mockPluginArtifact = await deployer.loadArtifact("MockUniswapPlugin");
      const mockPlugin = await deployer.deploy(mockPluginArtifact, [
-        whitelistedTokens,
         TEST_WETH,
         paymaster.address
      ]);
