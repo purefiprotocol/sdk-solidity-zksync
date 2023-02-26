@@ -53,7 +53,7 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
 
     function version() external pure returns (uint256) {
         //xxx.yyy.zzz
-        return 1000003;
+        return 1000004;
     }
 
     function swapToken( 
@@ -162,15 +162,16 @@ contract PureFiUniswapV3Plugin is AccessControl, IPureFiPlugin {
         // get current tokens ratio
         (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
 
+        uint256 amountInWithoutFee;
         if( _tokenIn < _tokenOut ){
             // ratio = _tokenOut / _tokenIn; => _tokenIn = _tokenOut / ratio;
-            _amountIn = (((_amountOut * 2**96) / sqrtPriceX96) * 2**96) / sqrtPriceX96;
+            amountInWithoutFee = (((_amountOut * 2**96) / sqrtPriceX96) * 2**96) / sqrtPriceX96;
         }else{
             // ratio = _tokenIn / _tokenOut; => _tokenIn = ratio * _tokenOut;
-            _amountIn = (((_amountOut * sqrtPriceX96) / 2**96) * sqrtPriceX96) / 2**96;
+            amountInWithoutFee = (((_amountOut * sqrtPriceX96) / 2**96) * sqrtPriceX96) / 2**96;
         }
         // add extra amount for fee compensation;
-        _amountIn = _amountIn * (DENOM_PERCENTAGE + _fee) / DENOM_PERCENTAGE;
+        _amountIn = amountInWithoutFee * DENOM_PERCENTAGE / ( DENOM_PERCENTAGE - _fee );
 
     }
 
