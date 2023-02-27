@@ -313,9 +313,16 @@ const getMinTokenAllowance = async (hre: HardhatRuntimeEnvironment, requiredETH:
     const mockPluginArtifact = await deployer.loadArtifact("MockUniswapPlugin");
     const mockPluginContract = new ethers.Contract(mockPlugin, mockPluginArtifact.abi);
 
+    const paymasterArtifact = await deployer.loadArtifact("PureFiPaymaster");
+    const paymaster = new ethers.Contract(PAYMASTER_ADDRESS, paymasterArtifact.abi);
+
+    const DENOM_PERCENTAGE = await paymaster.connect(wallet).DENOM_PERCENTAGE();
+    const overheadPercentage = await paymaster.connect(wallet).overheadPercentage();
+
     let requiredAllowance = await mockPluginContract.connect(wallet).getMinTokensAmountForETH(usdc, requiredETH);
     console.log("Required allowance from mockplugin ( USDC decimals : 6 ): ", requiredAllowance.toString());
-    requiredAllowance = requiredAllowance.mul(10000 + 2000).div(10000); // extra 20% for refunding
+
+    requiredAllowance = requiredAllowance.mul( DENOM_PERCENTAGE + overheadPercentage ).div(DENOM_PERCENTAGE); // extra 20% for refunding
     return requiredAllowance;
 }
 
