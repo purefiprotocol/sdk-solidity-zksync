@@ -1,32 +1,25 @@
 import '@matterlabs/hardhat-zksync-deploy';
 import '@matterlabs/hardhat-zksync-solc';
 import 'hardhat-abi-exporter';
+import { HardhatUserConfig } from 'hardhat/types';
+import { infuraApiKey } from "./network_keys/secrets.json"
+
 
 module.exports = {
   zksolc: {
-    version: '1.2.0',
-    compilerSource: 'binary',
-    settings: {
-      optimizer: {
-        enabled: true,
-      },
-      experimental: {
-        dockerImage: 'matterlabs/zksolc',
-        tag: 'v1.2.0',
-      },
-    },
-  },
-  zkSyncDeploy: {
-    zkSyncNetwork: 'https://zksync2-testnet.zksync.dev',
-    ethNetwork: 'goerli'
+    version: "1.3.5",
+    compilerSource: "binary",
+    settings: {},
   },
   networks: {
-    hardhat: {
+    zkSyncTestnet: {
+      url: "https://zksync2-testnet.zksync.dev",
+      ethNetwork: "goerli", // Can also be the RPC URL of the network (e.g. `https://goerli.infura.io/v3/<API_KEY>`)
       zksync: true,
     },
   },
+  defaultNetwork: "zkSyncTestnet",
   solidity: {
     version: '0.8.16',
   },
 };
-
