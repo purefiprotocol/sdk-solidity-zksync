@@ -35,8 +35,8 @@ const ADMIN = "0xcE14bda2d2BceC5247C97B65DBE6e6E570c4Bb6D";  // admin of issuer_
 
 // PureFiSubscriptionService params
 
-const UFI_TOKEN = "0x70892902C0BfFdEEAac711ec48F14c00b0fa7E3A";
-const TOKEN_BUYER = "";
+const UFI_TOKEN = "0xB477a7AB4d39b689fEa0fDEd737F97C76E4b0b93"; //test token in zksync testnet
+// const TOKEN_BUYER = "";
 const PROFIT_COLLECTION_ADDRESS = "0xcE14bda2d2BceC5247C97B65DBE6e6E570c4Bb6D";
 
 function toBN(number: any) {
@@ -199,3 +199,4 @@ export default async function (hre : HardhatRuntimeEnvironment){
     console.log("isProfitDistibutionPaused : ", await sub_service.isProfitDistributionPaused());
 
 }
+  
