@@ -14,7 +14,7 @@
   "dependencies": {
     "@matterlabs/hardhat-zksync-deploy": "^0.6.2",
     "@matterlabs/hardhat-zksync-solc": "^0.3.14",
-    "@matterlabs/zksync-contracts": "^0.4.2",
+    "@matterlabs/zksync-contracts": "^0.6.1",
     "@openzeppelin/contracts": "^4.7.3",
     "@openzeppelin/contracts-upgradeable": "^4.7.3",
     "eth-crypto": "^2.4.0",

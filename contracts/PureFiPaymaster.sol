@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import {IPaymaster, ExecutionResult} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
 import {IPaymasterFlow} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
-import {TransactionHelper, Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/TransactionHelper.sol";
+import {TransactionHelper, Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
 
 import "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 
@@ -69,11 +69,15 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         bytes32 _txHash,
         bytes32 _suggestedSignedHash,
         Transaction calldata _transaction
-    ) external payable override onlyBootloader returns (bytes memory context) {
+    ) external payable override onlyBootloader returns (bytes4 magic, bytes memory context) {
         require(
             _transaction.paymasterInput.length >= 4,
             "PureFiPaymaster: The standard paymaster input must be at least 4 bytes long"
         );
+
+        // By default we consider the transaction as accepted.
+        // If something will be wrong, set 'magic = bytes4(0)'
+        magic = IPaymaster.validateAndPayForPaymasterTransaction.selector;
 
         bytes4 paymasterInputSelector = bytes4(
             _transaction.paymasterInput[0:4]
@@ -103,8 +107,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             
             // Note, that while the minimal amount of ETH needed is tx.ergsPrice * tx.ergsLimit,
             // neither paymaster nor account are allowed to access this context variable.
-            uint256 requiredETH = _transaction.ergsLimit *
-                _transaction.maxFeePerErg;
+            uint256 requiredETH = _transaction.gasLimit * _transaction.maxFeePerGas;
 
             // require(msg.value >= requiredETH, "PureFiPaymaster: not enough ETH to pay for tx");
 
@@ -144,7 +147,7 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
         );
     }
 
-    function postOp(
+    function postTransaction(
         bytes calldata _context,
         Transaction calldata _transaction,
         bytes32 _txHash,

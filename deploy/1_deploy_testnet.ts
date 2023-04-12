@@ -15,6 +15,9 @@ const EMPTY_WALLET_PRIVATE_KEY = "0x9f1f9daa4d7093111684d7043824bc98a863444cd1a9
 
 const EMPTY_WALLET_ADDRESS = "0x4DF6Ba41aAF6209A9C47856feF7Fb8058e93d7Ae";
 
+/**
+ * $ yarn hardhat deploy-zksync --script deploy/1_deploy_testnet.ts
+ */
 export default async function (hre : HardhatRuntimeEnvironment){
 
     const provider = new Provider(hre.config.zkSyncDeploy.zkSyncNetwork);
@@ -31,6 +34,8 @@ export default async function (hre : HardhatRuntimeEnvironment){
         18
     ]);
 
+    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
+
     console.log("ERC20 address : ", erc20.address);
 
     const issuerAddress = EthCrypto.publicKey.toAddress(EthCrypto.publicKeyByPrivateKey(privateKeyIssuer));
@@ -42,6 +47,9 @@ export default async function (hre : HardhatRuntimeEnvironment){
     const issuerRegistry = await deployer.deploy(issuerRegistryArtifact, [
         wallet.address
     ]);
+    console.log("issuerRegistry: " + issuerRegistry.address)
+
+    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
 
     // register issuer 
     await issuerRegistry.register(issuerAddress, "0x0000000000000000000000000000000000000000000000000000000000000001");
