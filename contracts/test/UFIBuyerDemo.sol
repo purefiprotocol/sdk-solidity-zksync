@@ -74,11 +74,13 @@ contract UFIBuyerDemo is PureFiContext, OwnableUpgradeable {
                     ) external payable withDefaultAddressVerification (DefaultRule.Type2KYCAML, msg.sender, _purefidata) {
         _buy(_to);
     }
+
     function _buy(address _to) internal returns (uint256){
-        uint oneCent = 10 ** 18 / 100;
-        require(msg.value >= oneCent, "less than 0.01");
-        uint tokensSent = msg.value / oneCent;
-        ufi.transfer(_to, tokensSent);
-        return tokensSent;
+        uint256 denom = 1000;
+        uint256 oneCent = 10 ** 18 / denom;
+        require(msg.value >= oneCent, "Please send more then 0.01 ETH");
+        uint tokensToSend = msg.value * denom;
+        ufi.transfer(_to, tokensToSend);
+        return tokensToSend;
     }
 }
