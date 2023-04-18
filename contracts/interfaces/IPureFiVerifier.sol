@@ -15,6 +15,10 @@ pragma solidity ^0.8.0;
 
 interface IPureFiVerifier{
 
-    function validatePureFiData(bytes memory _purefidata) external view returns (bytes memory, uint16);
+    function validateAndDecode(bytes memory _purefidata) external returns (VerificationPackage memory);
+
+    //@Deprecated
+    function validatePureFiData(bytes memory _purefidata) external returns (bytes memory, uint16);
+    //@Deprecated
     function decodePureFiPackage(bytes memory _purefipackage) external view returns (VerificationPackage memory);
 }

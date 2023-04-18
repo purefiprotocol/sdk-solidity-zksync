@@ -105,11 +105,12 @@ contract PureFiSubscriptionService is AccessControlUpgradeable, AutomationCompat
     2000011 -> 2000012
     1. fixed issue with doubling contract address in usersExtras array.
     2. minor bug fixes
-        
+    2000012 -> 2000013
+    1. changed subscriptionOwner call to treat both sender and receiver in type2 messages
     */
     function version() public pure returns(uint32){
         // 000.000.000 - Major.minor.internal
-        return 2000012;
+        return 2000013;
     }
 
     function initialize(address _admin, address _ufi, address _tokenBuyer, address _profitCollectionAddress) public initializer{
@@ -158,8 +159,6 @@ contract PureFiSubscriptionService is AccessControlUpgradeable, AutomationCompat
     function unpauseProfitDistribution() external onlyRole(DEFAULT_ADMIN_ROLE){
         isProfitDistributionPaused = false;
     }
-
-
 
     function distributeProfit() external {
         _distributeProfit();
@@ -387,6 +386,17 @@ contract PureFiSubscriptionService is AccessControlUpgradeable, AutomationCompat
             }
             else {
                  subscriptionOwner = contractSubscriptions[_to].subscriptionOwner;
+            }
+        }
+        // request transfer from registered contract within type2 and type3 calls
+        else if((_type == 2 || _type == 3) && contractSubscriptions[_from].subscriptionOwner != address(0)){
+            if(contractSubscriptions[_from].requestResolver != address(0)){
+                IPureFiIssuerRequestResolver resolver = IPureFiIssuerRequestResolver(contractSubscriptions[_from].requestResolver);
+                if(resolver.resolveRequest(_type,_ruleID,_signer,_from,_to))
+                    subscriptionOwner = contractSubscriptions[_from].subscriptionOwner;
+            }
+            else {
+                 subscriptionOwner = contractSubscriptions[_from].subscriptionOwner;
             }
         }
         // signer has a valid and active subscription? 
