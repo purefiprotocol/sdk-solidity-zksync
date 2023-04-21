@@ -9,8 +9,6 @@ import fs from 'fs';
 
 
 //**** PUREFI SDK DEPLOYMENT SCRIPT *******//
-//**** TESTNET ONLY                 *******//
-
 // params for verifier
 
 const PARAM_DEFAULT_AML_GRACETIME_KEY = 3;
@@ -19,35 +17,36 @@ const DEFAULT_GRACETIME_VALUE = 300;
 const DEFAULT_AML_RULE = 431050;
 const DEFAULT_KYC_RULE = 777;
 const DEFAULT_KYCAML_RULE = 731090;
+const DEFAULT_CLEANING_TOLERANCE = 3600;
 
 const PARAM_TYPE1_DEFAULT_AML_RULE = 4;
 const PARAM_TYPE1_DEFAULT_KYC_RULE = 5;
 const PARAM_TYPE1_DEFAULT_KYCAML_RULE = 6;
+const PARAM_CLEANING_TOLERANCE = 10;
 
-const PROXY_ADMIN_ADDRESS = "";
+const PROXY_ADMIN_ADDRESS = "0xB477a7AB4d39b689fEa0fDEd737F97C76E4b0b93";
 const decimals = toBN(10).pow(18);
 
 // issuer_registry params
 
-const VALID_ISSUER_ADDRESS = "0x592157ab4c6FADc849fA23dFB5e2615459D1E4e5";
-const PROOF = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("PureFi Stage Issuer")); 
+const VALID_ISSUER_ADDRESS = "0xee5FF7E46FB99BdAd874c6aDb4154aaE3C90E698";
+const PROOF = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("PureFi Issuer")); 
 const ADMIN = "0xcE14bda2d2BceC5247C97B65DBE6e6E570c4Bb6D";  // admin of issuer_registry
 
 // PureFiSubscriptionService params
 
-const UFI_TOKEN = "0xB477a7AB4d39b689fEa0fDEd737F97C76E4b0b93"; //test token in zksync testnet
-// const TOKEN_BUYER = "";
+const UFI_TOKEN = "0xa0C1BC64364d39c7239bd0118b70039dBe5BbdAE"; //test token in zksync testnet
 const PROFIT_COLLECTION_ADDRESS = "0xcE14bda2d2BceC5247C97B65DBE6e6E570c4Bb6D";
 
 function toBN(number: any) {
     return ethers.BigNumber.from(number);
 }
 /**
- * $ yarn hardhat deploy-zksync --script deploy/testnet/1_deploy_testnet_sdk.ts
+ * $ yarn hardhat deploy-zksync --script deploy/mainnet/2_deploy_sdk.ts
  */
 export default async function (hre : HardhatRuntimeEnvironment){
 
-    const provider = new Provider(hre.config.networks.zkSyncTestnet.url);
+    const provider = new Provider(hre.config.networks.zkSyncMainnet.url);
     const wallet = new Wallet(privateKey, provider);
     const deployer = new Deployer(hre, wallet);
 
@@ -62,7 +61,7 @@ export default async function (hre : HardhatRuntimeEnvironment){
     const PureFiIssuerRegistry = await deployer.loadArtifact("PureFiIssuerRegistry");
     const PureFiVerifier = await deployer.loadArtifact("PureFiVerifier");
     const PureFiSubscriptionService = await deployer.loadArtifact("PureFiSubscriptionService");
-    const PureFiTokenBuyerPolygon = await deployer.loadArtifact("PureFiTokenBuyerPolygon");
+    const PureFiTokenBuyer = await deployer.loadArtifact("MockBuyerWithPrice");
 
     // DEPLOY PROXY_ADMIN //
     // ------------------------------------------------------------------- //
@@ -80,12 +79,12 @@ export default async function (hre : HardhatRuntimeEnvironment){
 
     // DEPLOY PureFiIssuerRegistry //
     // ------------------------------------------------------------------- //
-    const issuer_registry_mastercopy = await deployer.deploy(PureFiIssuerRegistry, [])
+    // const issuer_registry_mastercopy = await deployer.deploy(PureFiIssuerRegistry, [])
     
-    console.log("ISSUER_REGISTRY_MASTERCOPY address : ", issuer_registry_mastercopy.address);
-    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
+    // console.log("ISSUER_REGISTRY_MASTERCOPY address : ", issuer_registry_mastercopy.address);
+    // await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
     
-    const issuer_registry_proxy = await deployer.deploy(PPRoxy, [issuer_registry_mastercopy.address, proxy_admin.address, "0x"]);
+    const issuer_registry_proxy = await deployer.deploy(PPRoxy, ["0x1FDeEA7ae9D8d41C5a880E450E5Fac91B91CffDD", proxy_admin.address, "0x"]);
     
     console.log("issuer_registry address : ", issuer_registry_proxy.address);
     
@@ -130,24 +129,24 @@ export default async function (hre : HardhatRuntimeEnvironment){
 
     const verifier_proxy = await deployer.deploy(PPRoxy, [verifier_mastercopy.address, proxy_admin.address, "0x"]);
 
-    console.log("verifier_proxy address : ", verifier_proxy.address);
+    console.log("Verifier address : ", verifier_proxy.address);
 
     await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
     
     // initialize verifier
     const verifier = new Contract(verifier_proxy.address, PureFiVerifier.abi, wallet);
     await(await verifier.initialize(issuer_registry.address, whitelist.address)).wait();
+    console.log("Verifier version: ", (await verifier.version()).toString());
+
 
     // set verifier params
 
     await(await verifier.setUint256(PARAM_DEFAULT_AML_GRACETIME_KEY, DEFAULT_GRACETIME_VALUE)).wait();
-
     await(await verifier.setUint256(PARAM_TYPE1_DEFAULT_AML_RULE, DEFAULT_AML_RULE)).wait();
-
     await(await verifier.setUint256(PARAM_TYPE1_DEFAULT_KYC_RULE, DEFAULT_KYC_RULE)).wait();
-
     await(await verifier.setUint256(PARAM_TYPE1_DEFAULT_KYCAML_RULE, DEFAULT_KYCAML_RULE)).wait();
-    
+    await(await verifier.setUint256(PARAM_CLEANING_TOLERANCE, DEFAULT_CLEANING_TOLERANCE)).wait();
+
     await(await verifier.setString(1, "PureFiVerifier: Issuer signature invalid")).wait();
     await(await verifier.setString(2, "PureFiVerifier: Funds sender doesn't match verified wallet")).wait();
     await(await verifier.setString(3, "PureFiVerifier: Verification data expired")).wait();
@@ -158,7 +157,7 @@ export default async function (hre : HardhatRuntimeEnvironment){
     // DEPLOY PureFiTokenBuyerPolygon // 
     // ------------------------------------------------------------------- //
 
-    const token_buyer = await deployer.deploy(PureFiTokenBuyerPolygon, []);
+    const token_buyer = await deployer.deploy(PureFiTokenBuyer, []);
 
     console.log("Token_buyer address :", token_buyer.address);
     await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
@@ -185,18 +184,22 @@ export default async function (hre : HardhatRuntimeEnvironment){
         PROFIT_COLLECTION_ADDRESS
     )).wait();
 
+    console.log("Subscription version: ", (await sub_service.version()).toString());
+
     let yearTS = 86400*365;
     let USDdecimals = decimals;//10^18 // for current contract implementation
     await(await sub_service.setTierData(1,yearTS,toBN(50).mul(USDdecimals), 20, 1, 5)).wait();
     await(await sub_service.setTierData(2,yearTS,toBN(100).mul(USDdecimals), 20, 1, 15)).wait();
     await(await sub_service.setTierData(3,yearTS,toBN(300).mul(USDdecimals), 20, 1, 45)).wait();
-  
+    await(await sub_service.setTierData(10,yearTS,toBN(10000).mul(USDdecimals),0,3000,10000)).wait();
 
     // pause profitDistribution functionality
 
     await (await sub_service.pauseProfitDistribution()).wait();
 
     console.log("isProfitDistibutionPaused : ", await sub_service.isProfitDistributionPaused());
+
+    console.log("completed");
 
 }
   

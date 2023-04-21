@@ -19,6 +19,6 @@
     "@openzeppelin/contracts-upgradeable": "^4.7.3",
     "eth-crypto": "^2.4.0",
     "hardhat": "^2.12.1",
-    "zksync-web3": "^0.13.1"
+    "zksync-web3": "^0.14.3"
   }
 }
