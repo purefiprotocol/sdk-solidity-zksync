@@ -5,21 +5,50 @@ import { HardhatUserConfig } from 'hardhat/types';
 import { infuraApiKey } from "./network_keys/secrets.json"
 
 
+import { infuraApiKey, privateKey, mnemonic, etherscanApiKey, bscnode } from "./network_keys/secrets.json";
+
 module.exports = {
   zksolc: {
-    version: "1.3.5",
-    compilerSource: "binary",
-    settings: {},
-  },
-  networks: {
-    zkSyncTestnet: {
-      url: "https://zksync2-testnet.zksync.dev",
-      ethNetwork: "goerli", // Can also be the RPC URL of the network (e.g. `https://goerli.infura.io/v3/<API_KEY>`)
-      zksync: true,
+    version: '1.3.8',
+    compilerSource: 'binary',
+    settings: {
+      optimizer: {
+        enabled: true,
+      }
     },
+  },
+  zkSyncDeploy: {
+    zkSyncNetwork: 'https://zksync2-testnet.zksync.dev',
+    ethNetwork: 'goerli'
+  },
+
+
+  networks: {
+    mainnet:{
+      url: "https://mainnet.infura.io/v3/"+infuraApiKey // The Ethereum Web3 RPC URL (optional).
+    },
+    goerli: {
+      url: "https://goerli.infura.io/v3/"+infuraApiKey // The Ethereum Web3 RPC URL (optional).
+    },
+    zkSyncTestnet: {
+      url: "https://testnet.era.zksync.dev", // The testnet RPC URL of zkSync Era network.
+      ethNetwork: "goerli", // The Ethereum Web3 RPC URL, or the identifier of the network (e.g. `mainnet` or `goerli`)
+      zksync: true
+    },
+    zkSyncMainnet: {
+      url: "https://mainnet.era.zksync.io", // The testnet RPC URL of zkSync Era network.
+      ethNetwork: "mainnet", // The Ethereum Web3 RPC URL, or the identifier of the network (e.g. `mainnet` or `goerli`)
+      zksync: true
+    }
   },
   defaultNetwork: "zkSyncTestnet",
   solidity: {
-    version: '0.8.16',
+    version: '0.8.19',
+    settings: {
+      viaIR: true,
+      optimizer: {
+        enabled: true
+      }
+    }
   },
 };
