@@ -1,4 +1,4 @@
-# PureFi SDK for Solidity (Version 4) (for ZkSync)
+# PureFi SDK for Solidity for ZkSync (Version 4)
 
 SDK is dedicated for the EVM based networks. Provides KYC and AML verifications for smart contracts based vaults, funds and DeFi protocols. 
 
