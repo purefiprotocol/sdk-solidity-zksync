@@ -8,13 +8,14 @@ The idea of the Paymaster is inspired by the [PureFiContext](https://github.com/
 performed on the PureFi Issuer side. This process is typically initiated by the front-end (dApp), then verification is performed and signed package is provided to be used by the dApp to convince Smart contract that required veficication was performed, and it can accept funds. The detailed guide and description can be found [here](https://docs.purefi.io/integrate/products/aml-sdk/interactive-mode)
 
 [PureFiPaymaster](./contracts/PureFiPaymaster.sol) accepts signed packages issued by the PureFi issuer within the Paymaster payload
-```
-    (bytes memory input) = abi.decode(_transaction.paymasterInput[4:], (bytes));
 
+```
+    
     (uint64 timestamp, bytes memory signature, bytes memory package) = decodePureFiData(input);
 ```
 
 then decodes and validates this data
+
 ```
 
     VerificationPackage memory packageStruct = decodePackage(package);
@@ -29,13 +30,16 @@ then decodes and validates this data
 
 then set up the transaction context variables.
 ```
+
     address contextAddress = packageStruct.from;
 
     //saving data locally so that they can be queried by the customer contract
 
     contextData[contextAddress] = _getPureFiContext(packageStruct, timestamp + uint64(graceTime));
+```
 
 These variables could be then queried by the target smart contract [FilteredPool.sol](./contracts/example/FilteredPool.sol) to make sure that verification was performed according to the expected rule.
+
 ```
     function depositTo(
         uint256 _amount,
@@ -75,20 +79,50 @@ These variables could be then queried by the target smart contract [FilteredPool
             _deposit(_amount, _to);
        
     }
-``` 
+```
 > contextHolder in the code above is actually the PureFiPaymaster contract.
 
 This way the smart contract can be sure that funds and the sender address were verified according to the ruleID expected, and thus, it's safe to accept these funds from the user. 
 
-## Deployment and usage
+### ApprovalBased paymaster
+&nbsp;&nbsp;&nbsp;&nbsp;Updated paymaster becomes approval based.
+Paymaster has method to check if token is whitelisted.
 
-> complete deployment and test requires about 0.03 ETH
+```
+
+    function isWhitelisted( address _token ) // return true if token is supported by paymaster;
+
+```
+
+Paymaster contract uses exchange plugin for getting current tokens price. Therefore front-end needs to call exchange_plugin to correct computing minAllowance for paymasterInput.
+
+*exchangePlugin* is public variable of contract. Besides there is overhead for cost coverage in case of tokens price fluctuation. 
+Public variable *overheadPercentage* stores it.
+
+To get minAllowance for paymasterInput creation use code like this:
+
+```typescript
+    function getMinTokenAllowance( requiredETH, token ){
+        ...
+        const DENOM_PERCENTAGE = await paymaster.DENOM_PERCENTAGE();
+        const overheadPercentage = await paymaster.overheadPercentage();
+
+        let requiredAllowance = await exchangePlugin.getMinTokensAmountForETH(token, requiredETH);
+        requiredAllowance = requiredAllowance
+                                .mul( DENOM_PERCENTAGE + overheadPercentage )
+                                .div(DENOM_PERCENTAGE); // extra % for refunding
+        return requiredAllowance;
+
+    }
+
+```
+
+## Deployment and usage
 
 create a folder `network_keys` inside the project folder and put a file `secrets.json` into this folder. The structure of the secrets file is the following:
 
-```
+```json
     {
-        "mnemonic": "YOUR MNEMONIC HERE",
         "infuraApiKey": "<YOUR API KEY HERE>",
         "privateKey" : "YOUR MAIN WALLET PK HERE, WITH SOME BALANCE IN ZKSYNC TESTNET"
     }
@@ -100,8 +134,7 @@ Compile with command:
 Deploy contracts:
 - `yarn hardhat deploy-zksync --script deploy/1_deploy_testnet.ts`
 
-Contracts addresses in script 2_use_paymaster.ts 
-( PAYMASTER_ADDRESS, FILTERED_POOL_ADDRESS, TEST_TOKEN_ADDRESS ) replace with deployed contract
+After running first script file with deployed contracts address will be created *( addresses.json )* 
 
 the test is performed by the following command:
 - `yarn hardhat deploy-zksync --script deploy/2_use_paymaster.ts`: 
@@ -110,5 +143,4 @@ the test is performed by the following command:
 1. ERC20, FilteredPool and PureFiPaymaster are deployed
 2. a new wallet (a.k.a. emptyWallet) is generated and obtains 100 ERC20 tokens. No ETH balance exists on this address
 3. approval tx is issued from emptyWallet to allow FilteredPool to grap tokens. Tx is processed via PureFiPaymaster which pays for this tx
-3. deposit tx is issued from emptyWallet to FilteredPool. ERC20 tokens are transferred from emptyWallet to FilteredPool, totalCap is encreased. 
-3. withdraw tx is issued from emptyWallet to FilteredPool. ERC20 tokens are transferred from FilteredPool to emptyWallet, totalCap is decreased.
+3. deposit tx is issued from emptyWallet to FilteredPool. ERC20 tokens are transferred from emptyWallet to FilteredPool, totalCap is increased. 
