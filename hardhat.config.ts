@@ -2,8 +2,6 @@ import '@matterlabs/hardhat-zksync-deploy';
 import '@matterlabs/hardhat-zksync-solc';
 import 'hardhat-abi-exporter';
 import { HardhatUserConfig } from 'hardhat/types';
-import { infuraApiKey } from "./network_keys/secrets.json"
-
 
 import { infuraApiKey, privateKey, mnemonic, etherscanApiKey, bscnode } from "./network_keys/secrets.json";
 

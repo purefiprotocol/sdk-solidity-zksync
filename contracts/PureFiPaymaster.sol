@@ -149,8 +149,6 @@ contract PureFiPaymaster is AccessControl, SignLib, IPaymaster, IPureFiTxContext
             // Note, that while the minimal amount of ETH needed is tx.ergsPrice * tx.ergsLimit,
             // neither paymaster nor account are allowed to access this context variable.
 
-            uint256 requiredETH = _transaction.gasLimit * _transaction.maxFeePerGas;
-
             require(
                 IERC20(token).transferFrom(userAddress, address(this), requiredTokenAmount), 
                 "PureFiPaymaster : TransferFrom failed"

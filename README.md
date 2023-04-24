@@ -1,146 +1,47 @@
-# PureFi custom Paymaster
+# PureFi SDK for Solidity (Version 4) (for ZkSync)
 
-Original codebase is derived from the "Build a custom paymaster" tutorial from the [zkSync v2 documentation](https://v2-docs.zksync.io/dev/).
+SDK is dedicated for the EVM based networks. Provides KYC and AML verifications for smart contracts based vaults, funds and DeFi protocols. 
 
-The idea of the Paymaster is inspired by the [PureFiContext](https://github.com/purefiprotocol/sdk-solidity/blob/master/contracts/PureFiContext.sol) contract, which is following OpenZeppelin re-entrancy guard contract design approach. Meaning that it is setting context storage variables before target Tx starts, and erases after it finishes. 
+SDK provides 3 different verification methods: 
+ 1. Interactive Mode: requires interaction with Issuer via API before transaction issued. More detail 
+ 2. Whitelist Mode: completely on-chain mode, but requires pre-publishing of the verified data in whitelist, which is a special smart contract.
+ 3. Non-Interactive Mode: on-chain verification with the help of ZK-SNARKS. Implementation is still in progress...   
 
-[PureFiContext](https://github.com/purefiprotocol/sdk-solidity/blob/master/contracts/PureFiContext.sol) itself is the part of the PureFi protocol implementation which delivers AML (Anti-money laundering) verification data into the smart contract, thus allowing smart contract designers and operators take the decision either to accept or to block incoming funds (due to a high risk associated with the address or transaction, for example). PureFi makes use of the so called Rules (identified by RuleID), which associates the identifier (ruleID) with the explicit verification that is 
-performed on the PureFi Issuer side. This process is typically initiated by the front-end (dApp), then verification is performed and signed package is provided to be used by the dApp to convince Smart contract that required veficication was performed, and it can accept funds. The detailed guide and description can be found [here](https://docs.purefi.io/integrate/products/aml-sdk/interactive-mode)
+ ## Changelist V2->V3
+ 1. PureFiVerifier: Interactive mode now supports 3 types of data packages:
+    1.1 single address verification (derived from V1 and V2)
+    1.2 combined verification of the {from, to, token, amount}, where from - funds sender address, to - funds receiver address, token - token contract address and amount - max amount of tokens sent (max amount means that actual deposit can be less or equal). This type is recommended for a standard deposit functions where single token is sent by user and received by the smart contract.
+    1.3 transaction payload verification. This mode is designed for transactions, that combines sending of different tokens at the same time. For example, adding liquidity into the DEX pool. 
+    1.4 removed default support for whitelisted credentials. PureFiWhitelist still can be used directly.
+2. PureFiContext: upgraded to match PureFiVerifier changes + added helper functions and default rules for V2 compatible implementations. 
 
-[PureFiPaymaster](./contracts/PureFiPaymaster.sol) accepts signed packages issued by the PureFi issuer within the Paymaster payload
+## Changelist V3->V4
+1. PureFiVerifier: Enhances security for smart contract controlled subscriptions. 
+    1.1 Verifier contract now validates the caller of the verification data package. Should match either "from" or "to". This way only related contracts has access to verification data. 
+    1.2 All verification data packages now recorded on-chain to aviod re-use of the same package in consequent transacitons. 
+2. Subscriptions contract can now support contract subscriptions and on-chain resolver to let Issuer decide whether or not to process incoming request.
 
-```
-    
-    (uint64 timestamp, bytes memory signature, bytes memory package) = decodePureFiData(input);
-```
+## Integration example and live demo
+Please check the [Live Demo here:](https://frontendsdksolidity.purefi.io/)
+Integration documentation is available [here](https://docs.purefi.io/integrate/products/aml-sdk/interactive-mode)
 
-then decodes and validates this data
+Live Demo is available for both Ethereum and Binance Chain and is built upon the example contracts from this repo:
+ * [UFIBuyerBSCWithCheck](./contracts/examples/ex02-filtered_tokenbuyer/UFIBuyerBSCWithCheck.sol)
+ * [UFIBuyerETHWithCheck](./contracts/examples/ex02-filtered_tokenbuyer/UFIBuyerETHWithCheck.sol)
+## On-chain infrastructure:
+### ZKSync Era mainnet
+| Contract name | contract address |
+| ----------- | ----------- |
+| PureFi Token | 0xa0C1BC64364d39c7239bd0118b70039dBe5BbdAE |
+| PureFi Verifier (v4) | 0xB647483dB83ca97dB8a613c337886bf10ad3cD5B |
+| PureFi Subscription | 0xbB86a7C9aCf201A281488Df371E18c6cf5222010 |
 
-```
+### ZKSync Era Testnet
+| Contract name | contract address |
+| ----------- | ----------- 
+| PureFi Token | 0xB477a7AB4d39b689fEa0fDEd737F97C76E4b0b93 |
+| PureFi Verifier (V4) | 0x324DC9E87395B8581379dd35f43809C35c89470e |
+| PureFi Subscription | 0x587DB6B30848FbEE4EDf98aD581EB94E410C9a82 |
 
-    VerificationPackage memory packageStruct = decodePackage(package);
-    //get issuer address from the signature
-    address issuer = recoverSigner(keccak256(abi.encodePacked(timestamp, package)), signature);
-
-    require(hasRole(ISSUER_ROLE, issuer), "PureFiPaymaster: Issuer signature invalid");
-
-    require(timestamp + graceTime >= block.timestamp, "PureFiPaymaster: Credentials data expired");
-
-```
-
-then set up the transaction context variables.
-```
-
-    address contextAddress = packageStruct.from;
-
-    //saving data locally so that they can be queried by the customer contract
-
-    contextData[contextAddress] = _getPureFiContext(packageStruct, timestamp + uint64(graceTime));
-```
-
-These variables could be then queried by the target smart contract [FilteredPool.sol](./contracts/example/FilteredPool.sol) to make sure that verification was performed according to the expected rule.
-
-```
-    function depositTo(
-        uint256 _amount,
-        address _to
-    ) external {
-        //verify sender funds via PureFiContext
-        (
-            uint256 sessionID,
-            uint256 ruleID,
-            uint64 validUntil,
-            address verifiedUser,
-            address to,
-            address token,
-            uint256 amount,
-            bytes memory payload
-        ) = contextHolder.pureFiContextDataX(msg.sender);
-
-                   require(ruleID == expectedDepositRuleID, "Invalid ruleID provided");
-            require(
-                msg.sender == verifiedUser,
-                "Invalid verifiedUser provided"
-            );
-            require(token == address(basicToken), "Invalid token provided");
-            require(
-                to == address(this),
-                "Invalid to receiver address provided"
-            );
-            require(amount == _amount, "Invalid amount provided");
-            require(
-                validUntil >= block.timestamp,
-                "Validity package is expired"
-            );
-            require(
-                keccak256(payload) == keccak256(""),
-                "Invalid payload provided"
-            );
-            _deposit(_amount, _to);
-       
-    }
-```
-> contextHolder in the code above is actually the PureFiPaymaster contract.
-
-This way the smart contract can be sure that funds and the sender address were verified according to the ruleID expected, and thus, it's safe to accept these funds from the user. 
-
-### ApprovalBased paymaster
-&nbsp;&nbsp;&nbsp;&nbsp;Updated paymaster becomes approval based.
-Paymaster has method to check if token is whitelisted.
-
-```
-
-    function isWhitelisted( address _token ) // return true if token is supported by paymaster;
-
-```
-
-Paymaster contract uses exchange plugin for getting current tokens price. Therefore front-end needs to call exchange_plugin to correct computing minAllowance for paymasterInput.
-
-*exchangePlugin* is public variable of contract. Besides there is overhead for cost coverage in case of tokens price fluctuation. 
-Public variable *overheadPercentage* stores it.
-
-To get minAllowance for paymasterInput creation use code like this:
-
-```typescript
-    function getMinTokenAllowance( requiredETH, token ){
-        ...
-        const DENOM_PERCENTAGE = await paymaster.DENOM_PERCENTAGE();
-        const overheadPercentage = await paymaster.overheadPercentage();
-
-        let requiredAllowance = await exchangePlugin.getMinTokensAmountForETH(token, requiredETH);
-        requiredAllowance = requiredAllowance
-                                .mul( DENOM_PERCENTAGE + overheadPercentage )
-                                .div(DENOM_PERCENTAGE); // extra % for refunding
-        return requiredAllowance;
-
-    }
-
-```
-
-## Deployment and usage
-
-create a folder `network_keys` inside the project folder and put a file `secrets.json` into this folder. The structure of the secrets file is the following:
-
-```json
-    {
-        "infuraApiKey": "<YOUR API KEY HERE>",
-        "privateKey" : "YOUR MAIN WALLET PK HERE, WITH SOME BALANCE IN ZKSYNC TESTNET"
-    }
-```
-
-Compile with command:
-- `yarn hardhat compile`
-
-Deploy contracts:
-- `yarn hardhat deploy-zksync --script deploy/1_deploy_testnet.ts`
-
-After running first script file with deployed contracts address will be created *( addresses.json )* 
-
-the test is performed by the following command:
-- `yarn hardhat deploy-zksync --script deploy/2_use_paymaster.ts`: 
-
-## Testing flow
-1. ERC20, FilteredPool and PureFiPaymaster are deployed
-2. a new wallet (a.k.a. emptyWallet) is generated and obtains 100 ERC20 tokens. No ETH balance exists on this address
-3. approval tx is issued from emptyWallet to allow FilteredPool to grap tokens. Tx is processed via PureFiPaymaster which pays for this tx
-3. deposit tx is issued from emptyWallet to FilteredPool. ERC20 tokens are transferred from emptyWallet to FilteredPool, totalCap is increased. 
+## Documentation
+Please check PureFi Wiki site for more details. [AML SDK documentation is here](https://docs.purefi.io/integrate/welcome)
