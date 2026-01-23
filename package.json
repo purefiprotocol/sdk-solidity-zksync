@@ -4,7 +4,7 @@
   "main": "index.js",
   "repository": "git@github.com:purefiprotocol/sdk-solidity-zksync.git",
   "author": "miha.tiutin",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "ethers": "5.7.2",
     "hardhat-abi-exporter": "^2.10.1",
